@@ -9,7 +9,12 @@ author: Russell Folks
 
 history:
 -------
+
 02-26-2025  creation
+03-01-2025  Add function calc_location to calculate x,y position for the next
+            instance of each shape. Add default rectangle and arc sizes.
+            Standardize class docstring format.
+            New commit.
 """
 import tkinter as tk
 
@@ -43,7 +48,7 @@ class MyCanvas(tk.Canvas):
                  # mode='',
                  width=320,
                  height=320,
-                 background='#ffa',
+                 background='#ffa'
                  ):
         """
         Creates an instance of the MyCanvas object.
@@ -120,6 +125,7 @@ class MyCanvas(tk.Canvas):
         self.points.append(self.Point(event.x, event.y))
 
 
+
 class DrawCanvas(MyCanvas):
     """
     DrawCanvas : a tk Canvas for interactive drawing.
@@ -136,10 +142,10 @@ class DrawCanvas(MyCanvas):
         linetags (list of str): list of tags for each line object
 
     Methods:
-        draw_line:
-        double_click:
-        undo_line:
-        draw_path:
+        draw_line: create a line from previous to current point
+        double_click: create a line from current to starting point
+        undo_line: remove last-drawn line
+        draw_path: create a series of lines following the cursor
     """
     def __init__(self, parent,
                  mode='lines',
@@ -313,7 +319,7 @@ class ShapeCanvas(MyCanvas):
         toggle_selection: call function to set the 'current' shape object
         select_shape: make the shape nearest the cursor the current
         unselect_shape: reset current to the last-created shape
-        report_center: display current shape's center x,y
+        get_and_report_center: display current shape's center x,y
     """
     def __init__(self, parent,
                  **kwargs
@@ -345,8 +351,14 @@ class ShapeCanvas(MyCanvas):
         self.next_shape = 'oval'
         self.selected = None
 
-        self.oval_width = 10
-        self.oval_height = 15
+        self.oval_width = 20
+        self.oval_height = 25
+
+        self.rect_width = 25
+        self.rect_height = 20
+
+        self.arc_width = 30
+        self.arc_height = 25
 
         self.bind('<Button-1>', self.set_shape)
         self.bind('<Shift-Motion>', self.drag_shape)
@@ -379,10 +391,27 @@ class ShapeCanvas(MyCanvas):
                                        h=1,
                                        v=0: self.nudge_shape(ev, h, v))
 
+    def calc_location(self, shape):
+        start, end = 0, 0
+
+        match shape:
+            case 'oval':
+                xwidth, ywidth = self.oval_width, self.oval_height
+                start = self.startx - xwidth, self.starty - ywidth
+                end = self.startx + xwidth, self.starty + ywidth
+            case 'rectangle':
+                xwidth, ywidth = self.rect_width, self.rect_height
+                start = self.startx - xwidth, self.starty - ywidth
+                end = self.startx + xwidth, self.starty + ywidth
+            case 'arc':
+                xwidth, ywidth = self.arc_width, self.arc_height
+                start = self.startx - xwidth, self.starty - ywidth
+                end = self.startx + xwidth, self.starty + ywidth
+
+        return start, end
+
 
     def create_shape(self,
-                     start,
-                     end,
                      shape='oval',
                      linecolor='black',
                      width=1,
@@ -392,22 +421,25 @@ class ShapeCanvas(MyCanvas):
         match shape:
             case 'oval':
                 taglist = ['oval', tag]
-                id1 = self.create_oval(start,
-                                       end,
+                s, e = self.calc_location('oval')
+                id1 = self.create_oval(s,
+                                       e,
                                        outline=linecolor,
                                        width=width,
                                        tags=taglist)
             case 'rectangle':
                 taglist = ['rectangle', tag]
-                id1 = self.create_rectangle(start,
-                                            end,
+                s, e = self.calc_location('rectangle')
+                id1 = self.create_rectangle(s,
+                                            e,
                                             outline=linecolor,
                                             width=width,
                                             tags=taglist)
             case 'arc':
                 taglist = ['arc', tag]
-                id1 = self.create_arc(start,
-                                      end,
+                s, e = self.calc_location('arc')
+                id1 = self.create_arc(s,
+                                      e,
                                       outline=linecolor,
                                       width=width,
                                       start=90,
@@ -427,18 +459,14 @@ class ShapeCanvas(MyCanvas):
         """
         # set_center(event)
 
-        # TODO: these should be user preferences, not hard-coded values.
-        xwidth, ywidth = self.oval_width, self.oval_height
-
         self.set_start(event)
 
-        start_posn = self.startx - xwidth, self.starty - ywidth
-        end_posn = self.startx + xwidth, self.starty + ywidth
+        # xwidth, ywidth = self.oval_width, self.oval_height
+        # start_posn = self.startx - xwidth, self.starty - ywidth
+        # end_posn = self.startx + xwidth, self.starty + ywidth
         this_tag = self.next_shape + str(len(self.shapetags) + 1)
 
-        id1 = self.create_shape(start_posn,
-                                end_posn,
-                                shape=self.next_shape,
+        id1 = self.create_shape(shape=self.next_shape,
                                 linecolor=self.linecolor,
                                 width=self.linewidth,
                                 tag=this_tag)
@@ -457,7 +485,7 @@ class ShapeCanvas(MyCanvas):
     def drag_shape(self, event, constrain=False):
         """Handler for L-mouse drag when drawing shapes.
 
-        Interactively moves a shape object on the canvas. The constrain
+        Interactively moves a shape object on the canvas. The 'constrain'
         parameter coerces motion to horizontal or vertical by ignoring
         1-pixel shifts in x or y."""
         dx = 0
@@ -524,9 +552,8 @@ class ShapeCanvas(MyCanvas):
         outline = self.itemcget(self.selected, 'outline')
         self.report_center(c, outline)
 
-
-    def test_nudge_shape(self, event):
-        print(f'in test_nudge_shape: {event}')
+    # def test_nudge_shape(self, event):
+    #     print(f'in test_nudge_shape: {event}')
 
     def resize_shape(self, event):
         """Handler for L-mouse button + CONTROL key to modify a shape object.
