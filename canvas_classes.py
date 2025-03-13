@@ -78,7 +78,6 @@ class MyCanvas(tk.Canvas):
             thispoint.yval = yval
         self.Point = type('Point', (), {"__init__": point_init})
 
-
     def report_cursor_posn(self, event) -> None:
         """Display x,y cursor position at lower right of the canvas."""
         self.delete('text1')
@@ -93,16 +92,14 @@ class MyCanvas(tk.Canvas):
                          text=str(event.x) + ',' + str(event.y),
                          tags='text1')
 
-
     def clear_cursor_posn(self, event) -> None:
         """Remove displayed cursor position from the canvas."""
         self.delete('text1')
 
-
     def set_start(self, event) -> None:
         """Sets the coordinates of first, previous and start cursor locations.
 
-        Arguments:
+        Args:
             event (event): L-mouse click
 
         The following instance attributes are set:
@@ -122,7 +119,6 @@ class MyCanvas(tk.Canvas):
         #     # print(f'Point is a {type(self.Point)}')
         #     self.points.append(self.Point(event.x, event.y))
         self.points.append(self.Point(event.x, event.y))
-
 
 
 class DrawCanvas(MyCanvas):
@@ -161,7 +157,10 @@ class DrawCanvas(MyCanvas):
         # self.linewidth = linewidth
         self.linewidth = kwargs.get('linewidth')
         self.width = kwargs.get('width')
-        self.height = kwargs.get('height')
+        if 'height' in kwargs.keys():
+            self.height = kwargs.get('height')
+        else:
+            self.height = 200
         self.background = kwargs.get('background')
 
         super().__init__(parent, width=self.width, height=self.height, background=self.background)
@@ -181,11 +180,10 @@ class DrawCanvas(MyCanvas):
                 self.bind('<Double-1>', self.double_click)
                 self.bind('<Button-3>', self.undo_line)
 
-
     def draw_line(self, event) -> None:
         """If past starting posn, draw a line from previous to current posn.
 
-        Arguments:
+        Args:
             event (event): L-mouse click
         """
         if self.firstx == 0 and self.firsty == 0:
@@ -203,11 +201,10 @@ class DrawCanvas(MyCanvas):
         self.linetags.append(tagname)
         self.set_start(event)
 
-
     def double_click(self, event) -> None:
         """Draw lines to close a shape.
 
-        Arguments:
+        Args:
             event (event): L-double-click
 
         First, the single-click handler draws a line from the current position
@@ -233,11 +230,10 @@ class DrawCanvas(MyCanvas):
         self.points = []
         self.linetags = []
 
-
     def undo_line(self, event) -> None:
         """Remove last line and make previous cursor posn the current posn.
 
-        Arguments:
+        Args:
             event (event): R-mouse click
         """
         if (self.firstx, self.firsty) == (0, 0):
@@ -250,7 +246,6 @@ class DrawCanvas(MyCanvas):
             self.points.pop()
             if len(self.points) >= 1:
                 self.startx, self.starty = self.points[-1].xval, self.points[-1].yval
-
 
 
 class ShapeCanvas(MyCanvas):
@@ -351,7 +346,7 @@ class ShapeCanvas(MyCanvas):
     def calc_location(self, shape):
         """Calculate size and location of the next shape to be defined.
 
-        Arguments:
+        Args:
             shape (str): name description of the shape
         Return:
             (tuple): starting location x,y
@@ -374,7 +369,6 @@ class ShapeCanvas(MyCanvas):
 
         return start, end
 
-
     def create_shape(self,
                      shape='oval',
                      linecolor='black',
@@ -382,7 +376,7 @@ class ShapeCanvas(MyCanvas):
                      tag='oval'):
         """Create a new shape object on the canvas.
 
-        Arguments:
+        Args:
             shape (str): name description of the shape
             linecolor (str): color for drawing
             width (int): width of the line drawn
@@ -422,11 +416,10 @@ class ShapeCanvas(MyCanvas):
 
         return id1
 
-
     def set_shape(self, event):
         """Set up parameters for creating a new shape on the canvas.
 
-        Arguments:
+        Args:
             event (event): L-mouse button
 
         Gather parameters from instance attributes, call create_shape(),
@@ -451,11 +444,10 @@ class ShapeCanvas(MyCanvas):
 
             self.motionx, self.motiony = self.startx, self.starty
 
-
     def drag_shape(self, event, constrain=False):
         """Interactively moves a shape object on the canvas.
 
-        Arguments:
+        Args:
             event (event): L-mouse + motion
             constrain (boolean): coerces motion to vertical or horizontal by
                 ignoring 1-pixel shifts in x or y, respectively.
@@ -503,11 +495,10 @@ class ShapeCanvas(MyCanvas):
         outline = self.itemcget(self.selected, 'outline')
         self.report_center(center_posn, outline)
 
-
     def nudge_shape(self, event, dx, dy):
         """Move the selected shape object by one pixel, in one of 4 directions.
 
-        Arguments:
+        Args:
             event (event): Shift key + arrow key
             dx (int): number of pixels to move the shape horizontally
             dy (int): number of pixels to move the shape vertically
@@ -525,11 +516,10 @@ class ShapeCanvas(MyCanvas):
         outline = self.itemcget(self.selected, 'outline')
         self.report_center(c, outline)
 
-
     def resize_shape(self, event):
         """Interactively enlarge the selected shape.
 
-        Arguments:
+        Args:
             event (event): L-mouse button + Control key
         """
         if self.selected is None: return
@@ -545,7 +535,6 @@ class ShapeCanvas(MyCanvas):
             self.scale(theshape, center_posn['x'], center_posn['y'], 0.99, 0.99)
 
         self.motionx, self.motiony = event.x, event.y
-
 
     def get_and_report_center(self):
         """Get center of current shape and call a class method to report it."""
@@ -564,11 +553,10 @@ class ShapeCanvas(MyCanvas):
         else:
             self.select_shape(event)
 
-
     def unselect_shape(self, event):
         """Revert selected shape to the last one created, or None.
 
-        Arguments:
+        Args:
             event (event): Shift key + R-mouse click
         """
         for n, item in enumerate(self.shapetags):
@@ -594,7 +582,7 @@ class ShapeCanvas(MyCanvas):
     def select_shape(self, event):
         """Sets the shape nearest the cursor as the 'selected' shape.
 
-        Arguments:
+        Args:
             event (event): R-mouse click
 
         A class attribute keeps track of the currently selected shape, by its id. The
@@ -621,11 +609,10 @@ class ShapeCanvas(MyCanvas):
         else:
             print('no object found')
 
-
     def report_center(self, center, color) -> None:
         """Report center x,y coordinates for a shape.
 
-        Arguments:
+        Args:
             center (dict): coordinates as Int
             color (str): color for the text report
         """
