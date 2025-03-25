@@ -16,6 +16,10 @@ history:
             Standardize class docstring format.
             New commit.
 03-04-2025  Review all docstrings and edit for clarity and consistency.
+03-24-2025  ShapeCanvas binds 'Key' event, to be first used for deleting the
+            current shape. Add delete_shape(), add list 'objlist' to
+            keep track of shapes, to evnetually replace shape_tags,
+            shape_centers and shape_linecolors.
 """
 import tkinter as tk
 
@@ -248,6 +252,13 @@ class DrawCanvas(MyCanvas):
                 self.startx, self.starty = self.points[-1].xval, self.points[-1].yval
 
 
+class Shape():
+    def __init__(self, id, center=(0, 0), lc='black'):
+        self.id = id
+        self.center = center
+        self.lc = lc
+
+
 class ShapeCanvas(MyCanvas):
     """
     ShapeCanvas : a tk Canvas for creating shapes.
@@ -303,6 +314,8 @@ class ShapeCanvas(MyCanvas):
         self.next_shape = 'oval'
         self.selected = None
 
+        self.objlist = []
+
         self.oval_width = 20
         self.oval_height = 25
 
@@ -312,11 +325,12 @@ class ShapeCanvas(MyCanvas):
         self.arc_width = 30
         self.arc_height = 25
 
-        self.bind('<Button-1>', self.set_shape)
+        self.bind('<Button-1>', self.setup_shape)
         self.bind('<Shift-Motion>', self.drag_shape)
         self.bind('<Alt-Motion>', lambda ev, c=True: self.drag_shape(ev, c))
         self.bind('<Control-Motion>', self.resize_shape)
         self.bind('<Button-3>', lambda ev: self.toggle_selection(ev))
+        self.master.master.bind('<Key>', self.delete_shape)
 
         # self.master.bind('<Shift-Up>', lambda ev, h=0, v=-1: self.nudge_shape(ev, h, v))
         # self.master.bind('<Shift-Down>', lambda ev, h=0, v=1: self.nudge_shape(ev, h, v))
@@ -416,7 +430,7 @@ class ShapeCanvas(MyCanvas):
 
         return id1
 
-    def set_shape(self, event):
+    def setup_shape(self, event):
         """Set up parameters for creating a new shape on the canvas.
 
         Args:
@@ -443,6 +457,56 @@ class ShapeCanvas(MyCanvas):
             self.selected = id1
 
             self.motionx, self.motiony = self.startx, self.starty
+
+            # new
+            newshape = Shape(id1, (self.startx, self.starty), self.linecolor)
+            self.objlist.append(newshape)
+            print(f'objects: {len(self.objlist)}')
+            print(f'    created instance: {newshape.id=}, {newshape.center=}, {newshape.lc=}')
+            # end new
+
+    def delete_shape(self, event):
+        # Shift is 1, Control is 4, Alt is 8
+        # this version does not differentiate between L and R modifier keys
+        match event.state:
+            case 1:
+                'Shift'
+                print(f'Shift ({event.state}), {event.keysym}')
+                match event.keysym:
+                    case 'x' | 'X':
+                        print(f'    handle key: x')
+                    case _:
+                        print(f'    not handled: {event.keysym}')
+            case 4:
+                'Control'
+                print(f'Control ({event.state}), {event.keysym}')
+                match event.keysym:
+                    case 'x':
+                        print(f'    handle key: x')
+                        the_id = self.objlist[0].id
+                        self.delete(the_id)
+                        # find the object
+                        to_delete = next((n for n in self.objlist if n.id == the_id), None)
+                        # delete the objec
+                        self.objlist.remove(to_delete)
+                    case _:
+                        print(f'    not handled: {event.keysym}')
+            case 8:
+                'Alt'
+                print(f'Alt ({event.state}), {event.keysym}')
+                match event.keysym:
+                    case 'x':
+                        print(f'    handle key: x')
+                    case _:
+                        print(f'    not handled: {event.keysym}')
+            case 3 | 6 | 10:
+                # Caps lock has a state value of 2, so this case value reflects
+                # Caps Lock plus the modifier
+                print('is Caps Lock on?')
+            case _:
+                pass
+                # print(f'unhandled modifier: {event.state}, {event.keysym}')
+
 
     def drag_shape(self, event, constrain=False):
         """Interactively moves a shape object on the canvas.
@@ -625,3 +689,6 @@ class ShapeCanvas(MyCanvas):
                          text=textstr,
                          anchor='w',
                          tags='center_text')
+
+    def set_shape_parameter(self, p, val):
+        self.__dict__[p] = val
