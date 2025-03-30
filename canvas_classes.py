@@ -17,9 +17,13 @@ history:
             New commit.
 03-04-2025  Review all docstrings and edit for clarity and consistency.
 03-24-2025  ShapeCanvas binds 'Key' event, to be first used for deleting the
-            current shape. Add delete_shape(), add list 'objlist' to
-            keep track of shapes, to evnetually replace shape_tags,
-            shape_centers and shape_linecolors.
+            current shape. Add delete_shape(). Add 'objlist' to keep track of
+            shapes, to replace shape_tags, shape_centers and shape_linecolors.
+03-29-2025  Finish replacing use cases for shape_centers and shape_linecolors.
+            Add bind for Control-Button-3, and stub multi_select().
+"""
+"""
+TODO: 1. multi-select shapes: Shift + Control + R-mouse (state=5)
 """
 import tkinter as tk
 
@@ -253,10 +257,10 @@ class DrawCanvas(MyCanvas):
 
 
 class Shape():
-    def __init__(self, id, center=(0, 0), lc='black'):
+    def __init__(self, id, center=[0, 0], lc='black'):
         self.id = id
         self.center = center
-        self.lc = lc
+        self.linecolor = lc
 
 
 class ShapeCanvas(MyCanvas):
@@ -309,8 +313,8 @@ class ShapeCanvas(MyCanvas):
 
         self.linecolor = 'black'
         self.shapetags = []
-        self.shape_centers = []
-        self.shape_linecolors = []
+        # self.shape_centers = []
+        # self.shape_linecolors = []
         self.next_shape = 'oval'
         self.selected = None
 
@@ -329,8 +333,12 @@ class ShapeCanvas(MyCanvas):
         self.bind('<Shift-Motion>', self.drag_shape)
         self.bind('<Alt-Motion>', lambda ev, c=True: self.drag_shape(ev, c))
         self.bind('<Control-Motion>', self.resize_shape)
-        self.bind('<Button-3>', lambda ev: self.toggle_selection(ev))
-        self.master.master.bind('<Key>', self.delete_shape)
+        # works:
+        # self.bind('<Button-3>', lambda ev: self.toggle_selection(ev))
+        # works:
+        self.bind('<Button-3>', self.toggle_selection)
+        self.bind('<Control-Button-3>', self.multi_select)
+        self.master.master.bind('<Key>', self.handle_key)
 
         # self.master.bind('<Shift-Up>', lambda ev, h=0, v=-1: self.nudge_shape(ev, h, v))
         # self.master.bind('<Shift-Down>', lambda ev, h=0, v=1: self.nudge_shape(ev, h, v))
@@ -356,6 +364,15 @@ class ShapeCanvas(MyCanvas):
                                 lambda ev,
                                        h=1,
                                        v=0: self.nudge_shape(ev, h, v))
+
+    def multi_select(self, event):
+        # for Right-mouse, event.keysym has value '??'
+        # if Control+Shift, should be 5 (for un-multi-select)
+        print(f'in multi_select: {event.state=}')
+
+        # will need new instance var multi_selected, a list of ids
+
+
 
     def calc_location(self, shape):
         """Calculate size and location of the next shape to be defined.
@@ -430,6 +447,15 @@ class ShapeCanvas(MyCanvas):
 
         return id1
 
+    def set_next_tag(self, current_tag):
+        # count_type = self.taglist.count()
+        # find the number of tags that include the string current_tag
+        print(f'{current_tag=}')
+        found_list = [t for t in self.shapetags if current_tag in t]
+        # print(f'    found: {len(found_list)}')
+
+        return len(found_list)
+
     def setup_shape(self, event):
         """Set up parameters for creating a new shape on the canvas.
 
@@ -449,54 +475,74 @@ class ShapeCanvas(MyCanvas):
                                 tag=this_tag)
         if id1 is not None:
             self.shapetags.append(this_tag)
-            this_center = {'x':self.startx, 'y':self.starty}
+            # this_center = {'x':self.startx, 'y':self.starty}
+            this_center = [self.startx, self.starty]
+
             # print(f'set center: {this_center}')
-            self.shape_centers.append(this_center)
-            self.shape_linecolors.append(self.linecolor)
+            # self.shape_centers.append(this_center)
+            # self.shape_linecolors.append(self.linecolor)
             self.report_center(this_center, self.linecolor)
             self.selected = id1
+            print(f'{self.shapetags=}')
+            tags = self.itemcget(id1, 'tags')
+            print(f'new shape {tags=}')
 
             self.motionx, self.motiony = self.startx, self.starty
 
             # new
-            newshape = Shape(id1, (self.startx, self.starty), self.linecolor)
+            newshape = Shape(id1, [self.startx, self.starty], self.linecolor)
             self.objlist.append(newshape)
-            print(f'objects: {len(self.objlist)}')
-            print(f'    created instance: {newshape.id=}, {newshape.center=}, {newshape.lc=}')
+            # print(f'objects: {len(self.objlist)}')
+            # print(f'    created instance: {newshape.id=}, {newshape.center=}, {newshape.lc=}')
             # end new
+            next_tag = self.set_next_tag(self.next_shape)
+            print(f'    found: {next_tag}')
 
-    def delete_shape(self, event):
-        # Shift is 1, Control is 4, Alt is 8
-        # this version does not differentiate between L and R modifier keys
+    def handle_key(self, event):
+        """Handle keypress with optional modifier.
+
+        states: Shift is 1, Control is 4, Alt is 8
+        This version does not differentiate between L and R modifier keys.
+        """
         match event.state:
             case 1:
-                'Shift'
+                # Shift
                 print(f'Shift ({event.state}), {event.keysym}')
                 match event.keysym:
                     case 'x' | 'X':
-                        print(f'    handle key: x')
+                        print(f'    x')
                     case _:
                         print(f'    not handled: {event.keysym}')
             case 4:
-                'Control'
+                # Control
                 print(f'Control ({event.state}), {event.keysym}')
                 match event.keysym:
+                    case 'd':
+                        print(f'    d: duplicate selected shape')
+                        the_id = self.selected
+
+                        # tags =
+
                     case 'x':
-                        print(f'    handle key: x')
-                        the_id = self.objlist[0].id
+                        # Delete selected shape
+                        print(f'    x: delete selected shape')
+                        idlist = [i.id for i in self.objlist]
+                        the_id = self.selected
                         self.delete(the_id)
-                        # find the object
-                        to_delete = next((n for n in self.objlist if n.id == the_id), None)
-                        # delete the objec
-                        self.objlist.remove(to_delete)
+                        whichone = next((n for n in self.objlist if n.id == the_id), None)
+                        self.objlist.remove(whichone)
+
+                        # reset selected to the last-created object
+                        self.selected = self.objlist[-1].id
+                        idlist = [i.id for i in self.objlist]
                     case _:
                         print(f'    not handled: {event.keysym}')
             case 8:
-                'Alt'
+                # Alt
                 print(f'Alt ({event.state}), {event.keysym}')
                 match event.keysym:
                     case 'x':
-                        print(f'    handle key: x')
+                        print(f'    x')
                     case _:
                         print(f'    not handled: {event.keysym}')
             case 3 | 6 | 10:
@@ -505,8 +551,6 @@ class ShapeCanvas(MyCanvas):
                 print('is Caps Lock on?')
             case _:
                 pass
-                # print(f'unhandled modifier: {event.state}, {event.keysym}')
-
 
     def drag_shape(self, event, constrain=False):
         """Interactively moves a shape object on the canvas.
@@ -523,9 +567,12 @@ class ShapeCanvas(MyCanvas):
 
         theshape = self.selected
 
-        this_tag = self.gettags(theshape)[1]
-        this_index = self.shapetags.index(this_tag)
-        center_posn = self.shape_centers[this_index]
+        this_tag = self.gettags(self.selected)[1]
+
+        # this_index = self.shapetags.index(this_tag)
+        # center_posn = self.shape_centers[this_index]
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        center_posn = whichone.center
 
         if constrain:
             x_difference = abs(event.x - self.previousx)
@@ -545,14 +592,14 @@ class ShapeCanvas(MyCanvas):
         self.previousx = event.x
         self.previousy = event.y
 
-        # print(f'dx, dy: {dx}, {dy}')
-
         self.move(theshape, dx, dy)
 
         coords_float = self.coords(theshape)
         coords = [int(n) for n in coords_float]
-        center_posn['x'] = coords[0] + 20
-        center_posn['y'] = coords[1] + 20
+        # center_posn['x'] = coords[0] + 20
+        # center_posn['y'] = coords[1] + 20
+        center_posn[0] = coords[0] + 20
+        center_posn[1] = coords[1] + 20
 
         t = self.gettags(self.selected)[1]
 
@@ -571,14 +618,19 @@ class ShapeCanvas(MyCanvas):
         theshape = self.selected
         self.move(theshape, dx, dy)
 
-        t = self.gettags(theshape)[1]
-        whichone = self.shapetags.index(t)
-        c = self.shape_centers[whichone]
-        c['x'] += dx
-        c['y'] += dy
+        # tags = self.gettags(theshape)[1]
+        # whichone = self.shapetags.index(tags)
+        # c = self.shape_centers[whichone]
+        # c['x'] += dx
+        # c['y'] += dy
 
-        outline = self.itemcget(self.selected, 'outline')
-        self.report_center(c, outline)
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        whichone.center = list(sum(n) for n in zip(whichone.center, (dx, dy)))
+
+        # outline = self.itemcget(self.selected, 'outline')
+        outline = whichone.linecolor
+        # self.report_center(c, outline)
+        self.report_center(whichone.center, outline)
 
     def resize_shape(self, event):
         """Interactively enlarge the selected shape.
@@ -590,22 +642,33 @@ class ShapeCanvas(MyCanvas):
         theshape = self.selected
         this_tag = self.gettags(theshape)[1]
         this_index = self.shapetags.index(this_tag)
-        center_posn = self.shape_centers[this_index]
+        # center_posn = self.shape_centers[this_index]
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        center_posn = whichone.center
 
         if event.y < self.motiony:
-            self.scale(theshape, center_posn['x'], center_posn['y'], 1.01, 1.01)
+            # self.scale(theshape, center_posn['x'], center_posn['y'], 1.01, 1.01)
+            self.scale(theshape, center_posn[0], center_posn[1], 1.01, 1.01)
 
         if event.y > self.motiony:
-            self.scale(theshape, center_posn['x'], center_posn['y'], 0.99, 0.99)
+            # self.scale(theshape, center_posn['x'], center_posn['y'], 0.99, 0.99)
+            self.scale(theshape, center_posn[0], center_posn[1], 0.99, 0.99)
 
         self.motionx, self.motiony = event.x, event.y
 
     def get_and_report_center(self):
         """Get center of current shape and call a class method to report it."""
-        t = self.gettags(self.selected)[1]
-        whichone = self.shapetags.index(t)
-        center = self.shape_centers[whichone]
-        outline = self.itemcget(self.selected, 'outline')
+        # t = self.gettags(self.selected)[1]
+        # whichone = self.shapetags.index(t)
+        # print(f'{t=}, {whichone=}')
+
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        # print(f'{whichone=}, {whichone.center=}')
+        # center = self.shape_centers[whichone]
+        center = whichone.center
+
+        # outline = self.itemcget(self.selected, 'outline')
+        outline = whichone.linecolor
 
         self.report_center(center, outline)
 
@@ -613,8 +676,10 @@ class ShapeCanvas(MyCanvas):
         """Assign one shape to be the currently selected shape."""
         if event.state == 1:
             # Shift key pressed
+            print(f'toggle_selection:    {event.state=}')
             self.unselect_shape(event)
         else:
+            print(f'toggle_selection:    {event.state=}')
             self.select_shape(event)
 
     def unselect_shape(self, event):
@@ -634,15 +699,6 @@ class ShapeCanvas(MyCanvas):
 
         self.get_and_report_center()
 
-        # TRY
-        # t = self.gettags(self.selected)[1]
-        # whichone = self.shapetags.index(t)
-        # center = self.shape_centers[whichone]
-        # outline = self.itemcget(self.selected, 'outline')
-        #
-        # self.report_center(center, outline)
-        # END TRY
-
     def select_shape(self, event):
         """Sets the shape nearest the cursor as the 'selected' shape.
 
@@ -652,16 +708,21 @@ class ShapeCanvas(MyCanvas):
         A class attribute keeps track of the currently selected shape, by its id. The
         shape is highlighted with a color fill.
         """
+        print(f'{event.state=}')
+
         # remove lighlight from all shapes
         for item in enumerate(self.shapetags):
             self.itemconfigure(item[1], fill='')
 
         found = self.find_closest(event.x, event.y, halo=25)
+        print(f'{found=}')
         if len(found) > 0:
             self.selected = found[0]
+            print(f'{self.selected}')
 
             # highlight the seleced shape
             self.itemconfigure(self.selected, fill='#ffa')
+            self.after(500, lambda: self.itemconfigure(self.selected, fill=''))
 
             self.get_and_report_center()
             # t = self.gettags(self.selected)[1]
@@ -681,7 +742,10 @@ class ShapeCanvas(MyCanvas):
             color (str): color for the text report
         """
         self.delete('center_text')
-        textstr = f"center:  {center['x']}, {center['y']}"
+        # textstr = f"center:  {center['x']}, {center['y']}"
+        # textstr = f"center:  {center[0]}, {center[1]}"
+
+        textstr = f'{center[0]}, {center[1]}'
 
         self.create_text(10,
                          12,
