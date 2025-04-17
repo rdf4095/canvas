@@ -21,9 +21,14 @@ history:
             shapes, to replace shape_tags, shape_centers and shape_linecolors.
 03-29-2025  Finish replacing use cases for shape_centers and shape_linecolors.
             Add bind for Control-Button-3, and stub multi_select().
+03-31-2025  Remove references to shape_centers and shape_linecolors, and old
+            comments and debug statements.
+04-02-2025  Enable execution of this script, for feature testing. Add option to
+            revert color of the selected shape to default (black).
 """
 """
 TODO: 1. multi-select shapes: Shift + Control + R-mouse (state=5)
+      2. Should set some defaults (highlight color, default shape color...)
 """
 import tkinter as tk
 
@@ -313,8 +318,6 @@ class ShapeCanvas(MyCanvas):
 
         self.linecolor = 'black'
         self.shapetags = []
-        # self.shape_centers = []
-        # self.shape_linecolors = []
         self.next_shape = 'oval'
         self.selected = None
 
@@ -340,18 +343,12 @@ class ShapeCanvas(MyCanvas):
         self.bind('<Control-Button-3>', self.multi_select)
         self.master.master.bind('<Key>', self.handle_key)
 
-        # self.master.bind('<Shift-Up>', lambda ev, h=0, v=-1: self.nudge_shape(ev, h, v))
-        # self.master.bind('<Shift-Down>', lambda ev, h=0, v=1: self.nudge_shape(ev, h, v))
-        # self.master.bind('<Shift-Left>', lambda ev, h=-1, v=0: self.nudge_shape(ev, h, v))
-
-        # self.master.bind('<Shift-Right>', lambda ev, h=1, v=0: self.test_nudge_shape(ev, h, v))
-
         # With a Frame added to the object heirarchy, we have to bind to
         # the top-level object.
         self.master.master.bind('<Shift-Up>',
                                 lambda ev,
                                        h=0,
-                                       v=-1:self.nudge_shape(ev, h, v))
+                                       v=-1: self.nudge_shape(ev, h, v))
         self.master.master.bind('<Shift-Down>',
                                 lambda ev,
                                        h=0,
@@ -448,11 +445,9 @@ class ShapeCanvas(MyCanvas):
         return id1
 
     def set_next_tag(self, current_tag):
-        # count_type = self.taglist.count()
         # find the number of tags that include the string current_tag
-        print(f'{current_tag=}')
+        # print(f'{current_tag=}')
         found_list = [t for t in self.shapetags if current_tag in t]
-        # print(f'    found: {len(found_list)}')
 
         return len(found_list)
 
@@ -475,12 +470,9 @@ class ShapeCanvas(MyCanvas):
                                 tag=this_tag)
         if id1 is not None:
             self.shapetags.append(this_tag)
-            # this_center = {'x':self.startx, 'y':self.starty}
             this_center = [self.startx, self.starty]
 
             # print(f'set center: {this_center}')
-            # self.shape_centers.append(this_center)
-            # self.shape_linecolors.append(self.linecolor)
             self.report_center(this_center, self.linecolor)
             self.selected = id1
             print(f'{self.shapetags=}')
@@ -489,14 +481,10 @@ class ShapeCanvas(MyCanvas):
 
             self.motionx, self.motiony = self.startx, self.starty
 
-            # new
             newshape = Shape(id1, [self.startx, self.starty], self.linecolor)
             self.objlist.append(newshape)
-            # print(f'objects: {len(self.objlist)}')
-            # print(f'    created instance: {newshape.id=}, {newshape.center=}, {newshape.lc=}')
-            # end new
             next_tag = self.set_next_tag(self.next_shape)
-            print(f'    found: {next_tag}')
+            # print(f'    found: {next_tag}')
 
     def handle_key(self, event):
         """Handle keypress with optional modifier.
@@ -543,6 +531,7 @@ class ShapeCanvas(MyCanvas):
                 match event.keysym:
                     case 'x':
                         print(f'    x')
+                        self.set_to_black('black')
                     case _:
                         print(f'    not handled: {event.keysym}')
             case 3 | 6 | 10:
@@ -658,19 +647,18 @@ class ShapeCanvas(MyCanvas):
 
     def get_and_report_center(self):
         """Get center of current shape and call a class method to report it."""
-        # t = self.gettags(self.selected)[1]
-        # whichone = self.shapetags.index(t)
-        # print(f'{t=}, {whichone=}')
 
         whichone = next(n for n in self.objlist if n.id == self.selected)
-        # print(f'{whichone=}, {whichone.center=}')
-        # center = self.shape_centers[whichone]
         center = whichone.center
-
-        # outline = self.itemcget(self.selected, 'outline')
         outline = whichone.linecolor
 
         self.report_center(center, outline)
+
+    def set_to_black(self, color):
+        self.itemconfig(self.selected, outline=color)
+
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        whichone.linecolor = color
 
     def toggle_selection(self, event):
         """Assign one shape to be the currently selected shape."""
@@ -723,14 +711,7 @@ class ShapeCanvas(MyCanvas):
             # highlight the seleced shape
             self.itemconfigure(self.selected, fill='#ffa')
             self.after(500, lambda: self.itemconfigure(self.selected, fill=''))
-
             self.get_and_report_center()
-            # t = self.gettags(self.selected)[1]
-            # whichone = self.shapetags.index(t)
-            # center = self.shape_centers[whichone]
-            # outline = self.itemcget(self.selected, 'outline')
-            #
-            # self.report_center(center, outline)
         else:
             print('no object found')
 
@@ -742,9 +723,6 @@ class ShapeCanvas(MyCanvas):
             color (str): color for the text report
         """
         self.delete('center_text')
-        # textstr = f"center:  {center['x']}, {center['y']}"
-        # textstr = f"center:  {center[0]}, {center[1]}"
-
         textstr = f'{center[0]}, {center[1]}'
 
         self.create_text(10,
@@ -754,5 +732,26 @@ class ShapeCanvas(MyCanvas):
                          anchor='w',
                          tags='center_text')
 
+    # NOT CURRENTLY USED
     def set_shape_parameter(self, p, val):
         self.__dict__[p] = val
+
+
+if __name__ == '__main__':
+    root = tk.Tk()
+    canvas_frame = tk.Frame(root)
+    mydrawcanvas = DrawCanvas(canvas_frame,
+                              width=400,
+                              height=500,
+                              mode='freehand',
+                              background='cyan'
+                              )
+    mydrawcanvas.grid(column=0, row=0)
+    # myshapecanvas = ShapeCanvas(canvas_frame,
+    #                             width=400,
+    #                             height=500,
+    #                             background='cyan'
+    #                             )
+    # myshapecanvas.grid(column=0, row=0)
+    canvas_frame.grid(column=0, row=0)
+    root.mainloop()
