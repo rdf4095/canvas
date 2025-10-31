@@ -27,8 +27,14 @@ history:
             revert color of the selected shape to default (black).
 10-14-2025  Detect if user is deleting the only shape. Add ShapeCanvas
             list attribute: multi_select.
-10-18-2025  Implement delete-last for 'lines' mode and 'freehand' mode.
-            Add handle_key() to DrawCanvas.
+10-18-2025  Implement delete-last for 'lines' mode and 'freehand' mode, using
+            Ctrl-F or -L. Add handle_key() to DrawCanvas.
+10-21-2025  Add function return types.
+10-23-2025  In line mode, shape (set of lines) to be ended without connecting
+            to the first point.
+10-25-2025  Implement delete-all for either mode, using Ctrl-Shift-F or -L.
+10-30-2025  Add drag to the options for multi-selected shapes.
+10-31-2025  Add resize to the options for multi-selected shapes.
 """
 """
 TODO
@@ -142,9 +148,6 @@ class MyCanvas(tk.Canvas):
 
         self.startx, self.starty = event.x, event.y
 
-        # if self.mode == 'lines':
-        #     # print(f'Point is a {type(self.Point)}')
-        #     self.points.append(self.Point(event.x, event.y))
         self.points.append(self.Point(event.x, event.y))
 
 
@@ -181,7 +184,6 @@ class DrawCanvas(MyCanvas):
             background (str): Canvas background color
         """
         self.mode = mode
-        # self.linewidth = linewidth
         self.linewidth = kwargs.get('linewidth')
         self.width = kwargs.get('width')
         if 'height' in kwargs.keys():
@@ -200,16 +202,14 @@ class DrawCanvas(MyCanvas):
 
         match self.mode:
             case 'freehand':
-                # print('    binding freehand...')
                 self.bind('<Button-1>', self.set_start)
                 self.bind('<Button1-Motion>', self.draw_line)
                 self.bind('<ButtonRelease-1>', self.reset_line)
                 # works:
                 # self.master.bind('<Control-Delete>', self.erase_drawing)
             case 'lines':
-                # print('    binding lines...')
                 self.bind('<Button-1>', self.draw_line)
-                self.bind('<Double-1>', self.double_click)
+                self.bind('<Double-1>', self.connect_lines)
                 self.bind('<Button-3>', self.undo_line)
 
                 # works:
@@ -219,15 +219,12 @@ class DrawCanvas(MyCanvas):
         self.master.bind('<Key>', self.handle_key)
 
     def draw_line(self, event) -> None:
-        """If past starting posn, draw a line from previous to current posn.
-
-        Args:
-            event (event): L-mouse click
-        """
+        """If past starting posn, draw a line from previous to current posn."""
         if self.firstx == 0 and self.firsty == 0:
             self.set_start(event)
             return
 
+        print(f'in draw_line:  {event.state=}')
         self.line_count += 1
         tagname = 'line' + str(self.line_count)
         self.create_line(self.startx, self.starty,
@@ -243,18 +240,22 @@ class DrawCanvas(MyCanvas):
 
         self.set_start(event)
 
-    def double_click(self, event) -> None:
-        """Draw lines to close a shape.
+        # If Control, end the line(s) without closing.
+        # The unclosed "shape" can still be deleted
+        if event.state == 4:
+            self.firstx, self.firsty = 0, 0
+            self.last_shape = self.linetags.copy()
+            self.points = []
+            self.linetags = []
 
-        Args:
-            event (event): L-double-click
+    def connect_lines(self, event) -> None:
+        """In lines mode, handle double-L click: draw lines to close a shape.
 
         First, the single-click handler draws a line from the current position
         to the start posn. Then, this handler draws a line from the current to
         the previous position.
         """
         self.line_count += 1
-        # line_number = self.line_count + 1#len(self.points)
         tagname = 'line' + str(self.line_count)
         self.create_line(event.x, event.y,
                          self.firstx, self.firsty,
@@ -263,12 +264,9 @@ class DrawCanvas(MyCanvas):
                          tags=tagname)
         self.linetags.append(tagname)
 
-        # try (don't think this is necessary)
-        # self.startx, self.starty = self.previousx, self.previousy
-
         self.firstx, self.firsty = 0, 0
 
-        # remember the tag so the shape (set of lines) can be deleted
+        # remember the tags so the shape (set of lines) can be deleted
         self.last_shape = self.linetags.copy()
 
         # the current shape is closed, re-initialize lists
@@ -276,11 +274,7 @@ class DrawCanvas(MyCanvas):
         self.linetags = []
 
     def undo_line(self, event) -> None:
-        """Remove last line and make previous cursor posn the current posn.
-
-        Args:
-            event (event): R-mouse click
-        """
+        """Remove last line and make previous cursor posn the current posn."""
         if (self.firstx, self.firsty) == (0, 0):
             return
 
@@ -293,55 +287,86 @@ class DrawCanvas(MyCanvas):
                 self.startx, self.starty = self.points[-1].xval, self.points[-1].yval
 
     def reset_line(self, event) -> None:
+        """In freehand mode, handle mouseup: complete a line."""
         print('in reset_line...')
-        print(f'{self=}')
+        # print(f'{self=}')
 
         self.last_line = self.linetags.copy()
         self.linetags = []
         print(f'    {self.last_line[:3]=}')
 
-    def erase_drawing(self, event, drawtype='freehand') -> None:
-        # print(f'in erase_drawing, {drawtype=}...')
-        # print(f'{self=}')
-        # print(f'    {self.last_line=}')
-        # print(f'    {self.last_shape=}')
-
+    def erase_drawing(self,
+                      event,
+                      drawtype='freehand') -> None:
+        """Delete the last line or set of lines, depending on mode."""
         ch = self.master.winfo_children()
         ch_canv = [c for c in ch if c.__class__ == DrawCanvas]
+        # print(f'{ch_canv=}')
 
         if drawtype == 'freehand':
             for m, cnv in enumerate(ch_canv):
+                # print(f'{cnv.mode=}, {cnv.last_line=}')
                 if cnv.mode == 'freehand':
                     for n, item in enumerate(cnv.last_line):
                         cnv.delete(item)
                     cnv.last_line = []
+
         else:
             for m, cnv in enumerate(ch_canv):
+                # print(f'{cnv.mode=}, {cnv.last_shape=}')
                 if cnv.mode == 'lines':
                     for n, item in enumerate(cnv.last_shape):
                         cnv.delete(item)
                     cnv.last_shape = []
 
-    def handle_key(self, event):
+    def erase_all(self,
+                  event,
+                  drawtype='freehand') -> None:
+        """Delete all lines or sets of lines, depending on mode."""
+        ch = self.master.winfo_children()
+        ch_canv = [c for c in ch if c.__class__ == DrawCanvas]
+
+        for m, cnv in enumerate(ch_canv):
+            # print(f'{cnv.mode=}, {cnv.last_line=}')
+            if cnv.mode == drawtype:
+                drawings = cnv.find_all()
+                # print(f'{drawings=}')
+                for item in drawings:
+                    cnv.delete(item)
+
+                cnv.last_line = []
+
+    def handle_key(self, event) -> None:
         """Handle keypress with optional modifier.
 
         states: Shift is 1, Control is 4, Alt is 8
         This version does not differentiate between L and R modifier keys.
         """
-        print('in handle_key:')
+        # print('in handle_key:')
+        # print(f'    {event.keysym=}')
         match event.state:
             case 4:
                 # Control
-                print(f'Control ({event.state}), {event.keysym}')
+                # print(f'Control ({event.state}), {event.keysym}')
                 match event.keysym:
                     case 'l' | 'L':
-                        print(f'    L')
+                        print(f'    Ctrl-L')
                         self.erase_drawing(event, 'lines')
                     case 'f' | 'F':
-                        print(f'    F')
+                        print(f'    Ctrl-F')
                         self.erase_drawing(event, 'freehand')
                     case _:
-                        print(f'    not handled: {event.keysym}')
+                        print(f'    not handled: Ctrl + {event.keysym}')
+            case 5:
+                # print(f'{event.state=}, {event.keysym=}')
+                match event.keysym:
+                    case 'f' | 'F':
+                        print(f'    Ctrl-Shift-F')
+                        self.erase_all(event, 'freehand')
+                    case 'l' | 'L':
+                        print(f'    Ctrl-Shift-L')
+                        self.erase_all(event, 'lines')
+
 
 class Shape():
     def __init__(self, id, center=[0, 0], lc='black'):
@@ -423,7 +448,8 @@ class ShapeCanvas(MyCanvas):
         # self.bind('<Button-3>', lambda ev: self.toggle_selection(ev))
         # works:
         self.bind('<Button-3>', self.toggle_selection)
-        self.bind('<Control-Button-3>', self.multi_select)
+        # self.bind('<Control-Button-3>', self.multi_select)
+        self.bind('<Control-Button-3>', self.toggle_multi_select)
         self.master.master.bind('<Key>', self.handle_key)
 
         # With a Frame added to the object heirarchy, we have to bind to
@@ -445,25 +471,32 @@ class ShapeCanvas(MyCanvas):
                                        h=1,
                                        v=0: self.nudge_shape(ev, h, v))
 
-    def multi_select(self, event):
-        # for Right-mouse, event.keysym has value '??'
-        # if Control+Shift, should be 5 (for un-multi-select)
-        print(f'in multi_select: {event.state=}')
+    def toggle_multi_select(self, event) -> None:
+        # print(f'in multi_select: {event.state=}')
 
-        # will need a selection indicator, e.g. grey line color
         self.toggle_selection(event)
-        print(f'    {self.selected=}')
+        # print(f'    {self.selected=}')
         the_id = self.selected
 
-        # debug: report linecolor
-        # print(f'{self.itemcget(the_id, "outline")=}')
+        # set selection indicator
         self.itemconfigure(the_id, outline='grey')
 
-        self.multi_selected.append(the_id)
+        # print(f'    start: {self.multi_selected=}')
+        if the_id in self.multi_selected:
+            self.multi_selected.remove(the_id)
+            # reset linecolor to original
+            lc = ''
+            for n, shape in enumerate(self.objlist):
+                if shape.id == the_id:
+                    lc = self.objlist[n].linecolor
+            # print(f'    {lc=}')
+            if lc != '':
+                self.itemconfigure(the_id, outline=lc)
+        else:
+            self.multi_selected.append(the_id)
+            self.selected = self.multi_selected[-1]
 
-
-
-    def calc_location(self, shape):
+    def calc_location(self, shape) -> tuple:
         """Calculate size and location of the next shape to be defined.
 
         Args:
@@ -536,14 +569,14 @@ class ShapeCanvas(MyCanvas):
 
         return id1
 
-    def set_next_tag(self, current_tag):
+    def set_next_tag(self, current_tag) -> int:
         # find the number of tags that include the string current_tag
         # print(f'{current_tag=}')
         found_list = [t for t in self.shapetags if current_tag in t]
 
         return len(found_list)
 
-    def setup_shape(self, event):
+    def setup_shape(self, event) -> None:
         """Set up parameters for creating a new shape on the canvas.
 
         Args:
@@ -576,9 +609,9 @@ class ShapeCanvas(MyCanvas):
             newshape = Shape(id1, [self.startx, self.starty], self.linecolor)
             self.objlist.append(newshape)
             next_tag = self.set_next_tag(self.next_shape)
-            # print(f'    found: {next_tag}')
+            print(f'{next_tag=}')
 
-    def handle_key(self, event):
+    def handle_key(self, event) -> None:
         """Handle keypress with optional modifier.
 
         states: Shift is 1, Control is 4, Alt is 8
@@ -600,9 +633,6 @@ class ShapeCanvas(MyCanvas):
                     case 'd':
                         print(f'    d: duplicate selected shape')
                         the_id = self.selected
-
-                        # tags =
-
                     case 'x':
                         # Delete selected shape
                         print(f'    x: delete selected shape')
@@ -632,7 +662,7 @@ class ShapeCanvas(MyCanvas):
                     case _:
                         print(f'    not handled: {event.keysym}')
             case 3 | 6 | 10:
-                # Caps lock has a state value of 2, so this case value reflects
+                # Caps Lock has a state value of 2, so this case reflects
                 # Caps Lock plus the modifier
                 print('is Caps Lock on?')
             case _:
@@ -651,9 +681,8 @@ class ShapeCanvas(MyCanvas):
         shift = 1
         self.report_cursor_posn(event)
 
-        theshape = self.selected
-
-        this_tag = self.gettags(self.selected)[1]
+        # ? not needed
+        # this_tag = self.gettags(self.selected)[1]
 
         # this_index = self.shapetags.index(this_tag)
         # center_posn = self.shape_centers[this_index]
@@ -678,7 +707,13 @@ class ShapeCanvas(MyCanvas):
         self.previousx = event.x
         self.previousy = event.y
 
-        self.move(theshape, dx, dy)
+        if len(self.multi_selected) > 0:
+            for n, item in enumerate(self.multi_selected):
+                self.move(item, dx, dy)
+            theshape = self.multi_selected[-1]
+        else:
+            theshape = self.selected
+            self.move(theshape, dx, dy)
 
         coords_float = self.coords(theshape)
         coords = [int(n) for n in coords_float]
@@ -692,13 +727,13 @@ class ShapeCanvas(MyCanvas):
         outline = self.itemcget(self.selected, 'outline')
         self.report_center(center_posn, outline)
 
-    def nudge_shape(self, event, dx, dy):
+    def nudge_shape(self, event, dx, dy) -> None:
         """Move the selected shape object by one pixel, in one of 4 directions.
 
         Args:
             event (event): Shift key + arrow key
-            dx (int): number of pixels to move the shape horizontally
-            dy (int): number of pixels to move the shape vertically
+            dx (int): number of pixels to move horizontally
+            dy (int): number of pixels to move vertically
         """
         # mydrawcanvas.focus_set()
         theshape = self.selected
@@ -713,9 +748,7 @@ class ShapeCanvas(MyCanvas):
         whichone = next(n for n in self.objlist if n.id == self.selected)
         whichone.center = list(sum(n) for n in zip(whichone.center, (dx, dy)))
 
-        # outline = self.itemcget(self.selected, 'outline')
         outline = whichone.linecolor
-        # self.report_center(c, outline)
         self.report_center(whichone.center, outline)
 
     def resize_shape(self, event):
@@ -724,25 +757,39 @@ class ShapeCanvas(MyCanvas):
         Args:
             event (event): L-mouse button + Control key
         """
+        print('in resize_shape...')
         if self.selected is None: return
         theshape = self.selected
         this_tag = self.gettags(theshape)[1]
+        # ? don't need this
         this_index = self.shapetags.index(this_tag)
         # center_posn = self.shape_centers[this_index]
         whichone = next(n for n in self.objlist if n.id == self.selected)
         center_posn = whichone.center
 
-        if event.y < self.motiony:
-            # self.scale(theshape, center_posn['x'], center_posn['y'], 1.01, 1.01)
-            self.scale(theshape, center_posn[0], center_posn[1], 1.01, 1.01)
+        print(f'    {center_posn=}')
 
-        if event.y > self.motiony:
-            # self.scale(theshape, center_posn['x'], center_posn['y'], 0.99, 0.99)
-            self.scale(theshape, center_posn[0], center_posn[1], 0.99, 0.99)
+        if theshape in self.multi_selected:
+            group = [n for n in self.objlist if n.id in self.multi_selected]
+
+            for n, item in enumerate(group):
+                if event.y < self.motiony:
+                    self.scale(item.id, item.center[0], item.center[1], 1.01, 1.01)
+
+                if event.y > self.motiony:
+                    self.scale(item.id, item.center[0], item.center[1], 0.99, 0.99)
+        else:
+            if event.y < self.motiony:
+                # self.scale(theshape, center_posn['x'], center_posn['y'], 1.01, 1.01)
+                self.scale(theshape, center_posn[0], center_posn[1], 1.01, 1.01)
+
+            if event.y > self.motiony:
+                # self.scale(theshape, center_posn['x'], center_posn['y'], 0.99, 0.99)
+                self.scale(theshape, center_posn[0], center_posn[1], 0.99, 0.99)
 
         self.motionx, self.motiony = event.x, event.y
 
-    def get_and_report_center(self):
+    def get_and_report_center(self) -> None:
         """Get center of current shape and call a class method to report it."""
 
         whichone = next(n for n in self.objlist if n.id == self.selected)
@@ -751,30 +798,31 @@ class ShapeCanvas(MyCanvas):
 
         self.report_center(center, outline)
 
-    def set_to_black(self, color):
+    def set_to_black(self, color) -> None:
         self.itemconfig(self.selected, outline=color)
 
         whichone = next(n for n in self.objlist if n.id == self.selected)
         whichone.linecolor = color
 
-    def toggle_selection(self, event):
+    def toggle_selection(self, event) -> None:
         """Assign one shape to be the currently selected shape."""
         if event.state == 1:
             # Shift key pressed
-            print(f'toggle_selection:    {event.state=}, unselecting...')
+            # print(f'toggle_selection:    {event.state=}, unselecting...')
             self.unselect_shape(event)
         else:
-            print(f'toggle_selection:    {event.state=}, selecting...')
+            # print(f'toggle_selection:    {event.state=}, selecting...')
             self.select_shape(event)
 
         return
 
-    def unselect_shape(self, event):
+    def unselect_shape(self, event) -> None:
         """Revert selected shape to the last one created, or None.
 
         Args:
             event (event): Shift key + R-mouse click
         """
+        # TODO: handle the case of the last shape deleted (after delete is implemented)
         for n, item in enumerate(self.shapetags):
             self.itemconfigure(item, fill='')
 
@@ -786,7 +834,7 @@ class ShapeCanvas(MyCanvas):
 
         self.get_and_report_center()
 
-    def select_shape(self, event):
+    def select_shape(self, event) -> None:
         """Sets the shape nearest the cursor as the 'selected' shape.
 
         Args:
@@ -814,9 +862,12 @@ class ShapeCanvas(MyCanvas):
         else:
             print('no object found')
         print('returning from select_shape...')
+
         return
 
-    def report_center(self, center, color) -> None:
+    def report_center(self,
+                      center: dict,
+                      color: str) -> None:
         """Report center x,y coordinates for a shape.
 
         Args:
@@ -848,11 +899,11 @@ if __name__ == '__main__':
                               background='cyan'
                               )
     mydrawcanvas.grid(column=0, row=0)
-    # myshapecanvas = ShapeCanvas(canvas_frame,
-    #                             width=400,
-    #                             height=500,
-    #                             background='cyan'
-    #                             )
-    # myshapecanvas.grid(column=0, row=0)
+    myshapecanvas = ShapeCanvas(canvas_frame,
+                                width=400,
+                                height=500,
+                                background='cyan'
+                                )
+    myshapecanvas.grid(column=1, row=0)
     canvas_frame.grid(column=0, row=0)
     root.mainloop()
