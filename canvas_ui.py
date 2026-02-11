@@ -11,6 +11,8 @@ comments: To display images at their native size(s) when img dimensions
           transparent to the caller.
           Note: this hasn't been tested.
 
+          No Artificial Intelligence was used in production of this code.
+
 author: Russell Folks
 
 history:
@@ -35,6 +37,9 @@ history:
 11-28-2024  Adjust whitespace, remove commented-out code.
 07-11-2025  Add resize_viewport() for dragging the window size.
 07-25-2025  Delete old versions of some functions.
+12-10-2025  Refactor get_positions() and set_canv_centered() to use enumeration
+            with a list of shift factors. Remove default condition from
+            get_1_posn().
 """
 """
 TODO:
@@ -79,103 +84,178 @@ Posn = type('Posn', (), {"__init__": posn_init})
 def get_positions(vp: dict,
                   objects: list,
                   arrange: tuple) -> list:
-    """Assign locations for all images in a Canvas."""
-    pos_list = []
+    """Assign locations for all images in a Canvas.
+
+    Images are assumed to be gridded in the Canvas as follows:
+    1  2
+    3  4
+    Arguments:
+    vp: a conceptual 'viewport' or area within which the image is placed,
+    assumed to be the same width/height for each image.
+    objects: list of images.
+    arrange: flags for horizontal and vertical alignment in the vp.
+    """
+    positions = []
 
     # Special case: all images centered to the whole canvas.
     if arrange == ('cc', 'cc'):
-        pos_list = set_canv_centered(vp, objects)
-        return pos_list
+        positions = set_canv_centered(vp, objects)
+        return positions
 
-    posn1 = get_1_posn(vp, objects[0], arrange)
-    pos_list.append(posn1)
+    # original:
+    # posn1 = get_1_posn(vp, objects[0], arrange)
+    # positions.append(posn1)
+    #
+    # if len(objects) >= 2:
+    #     posn2 = get_1_posn(vp, objects[1], arrange, True)
+    #     positions.append(posn2)
+    #
+    # if len(objects) >= 3:
+    #     posn3 = get_1_posn(vp, objects[2], arrange, False, True)
+    #     positions.append(posn3)
+    #
+    # if len(objects) == 4:
+    #     posn4 = get_1_posn(vp, objects[3], arrange, True, True)
+    #     pos_list.append(posn4)
 
-    if len(objects) >= 2:
-        posn2 = get_1_posn(vp, objects[1], arrange, True)
-        pos_list.append(posn2)
+    # for n, item in enumerate(pos_list):
+    #     print(f'{item.x}, {item.y}')
+    #     print(f'    {pos_list[n].x}, {pos_list[n].y}')
 
-    if len(objects) >= 3:
-        posn3 = get_1_posn(vp, objects[2], arrange, False, True)
-        pos_list.append(posn3)
+    # alternative:
+    # Define the location shift for each image in the canvas grid:
+    # 1  2
+    # 3  4
+    shift_right = vp['w'] + vp['gutter']
+    shift_down = vp['h'] + vp['gutter']
+    # shifts = [
+    #     (0, 0),                                            # 1: no shift
+    #     (vp['w'] + vp['gutter'], 0),                       # 2: right
+    #     (0, vp['h'] + vp['gutter']),                       # 3: down
+    #     (vp['w'] + vp['gutter'], vp['h'] + vp['gutter'])   # 4: right, down
+    # ]
+    shifts = [
+        (0, 0),
+        (shift_right, 0),
+        (0, shift_down),
+        (shift_right, shift_down)
+    ]
+    positions = []
+    for n, item in enumerate(objects):
+        posn = get_1_posn(vp, item, arrange)
+        posn.x += shifts[n][0]
+        posn.y += shifts[n][1]
+        positions.append(posn)
 
-    if len(objects) == 4:
-        posn4 = get_1_posn(vp, objects[3], arrange, True, True)
-        pos_list.append(posn4)
-
-    return pos_list
+    return positions
 
 
 def get_1_posn(vp: dict,
                obj: object,
                arrange: tuple,
-               shift_right: bool = False,
-               shift_down: bool = False) -> Posn:
+               ) -> Posn:
     """Assign location for one image in a Canvas."""
     imp = Posn(0, 0)
 
+    # Default is 'top', 'left'
     match arrange[1]:
-        case 'top':
-            imp.y = 0
+        # case 'top':
+        #     imp.y = 0
         case 'center':
             imp.y = (vp['h'] - obj.height) / 2
         case 'bottom':
             imp.y = vp['h'] - obj.height
 
     match arrange[0]:
-        case 'left':
-            imp.x = 0
+        # case 'left':
+        #     imp.x = 0
         case 'center':
             imp.x = (vp['w'] - obj.width) / 2
         case 'right':
             imp.x = vp['w'] - obj.width
 
-    # if shift_right is True:
-    if shift_right:
-        imp.x += (vp['w'] + vp['gutter'])
-    # if shift_down is True:
-    if shift_down:
-        imp.y += (vp['h'] + vp['gutter'])
+    # if shift_right:
+    #     imp.x += (vp['w'] + vp['gutter'])
+    # if shift_down:
+    #     imp.y += (vp['h'] + vp['gutter'])
 
     return imp
 
 
 def set_canv_centered(vp: dict, objs: list) -> list:
+    """Display all images, centered around the canvas center.
+
+    Images are assumed to be gridded in the Canvas as follows:
+    1  2
+    3  4
+    Arguments:
+    vp: a conceptual 'viewport' or area within which the image is placed,
+    assumed to be the same width/height for each image.
+    objs: list of images.
+    """
+    # imp1 = Posn(0, 0)
+    # imp2 = Posn(0, 0)
+    # imp3 = Posn(0, 0)
+    # imp4 = Posn(0, 0)
+
+    # Define the location shift for each image in the canvas grid:
+    # 1  2
+    # 3  4
+    # start from bottom R of vp
+    # shifts = [
+    #     (-objs[0].width, -objs[0].height),    # 1: no shift
+    #     (vp['gutter'], -objs[1].height),      # 2: right
+    #     (-objs[2].width, vp['gutter']) ,      # 3: down
+    #     (vp['gutter'], vp['gutter'])          # 4: right, down
+    # ]
+    # start from top L of vp, like get_positions() above
+    shift_right = vp['w'] + vp['gutter']
+    shift_down = vp['h'] + vp['gutter']
+    # shifts = [
+    #     (vp['w'] - objs[0].width, vp['h'] - objs[0].height),
+    #     (shift_right,             vp['h'] - objs[1].height),
+    #     (vp['w'] - objs[2].width, shift_down),
+    #     (shift_right,             shift_down)
+    # ]
+    # handle any list of image objects from one to four.
+    temp_widths = [0] * 4
+    temp_heights = [0] * 4
+    for n, obj in enumerate(objs):
+        temp_widths[n] = obj.width
+        temp_heights[n] = obj.height
+
+    shifts = [
+        (vp['w'] - temp_widths[0], vp['h'] - temp_heights[0]),
+        (shift_right, vp['h'] - temp_heights[1]),
+        (vp['w'] - temp_widths[2], shift_down),
+        (shift_right, shift_down)
+    ]
+
+    # imp1.x = vp['w'] - objs[0].width
+    # imp1.y = vp['h'] - objs[0].height
+    # positions.append(imp1)
+    #
+    # if len(objs) >= 2:
+    #     imp2.x = vp['w'] + vp['gutter']
+    #     imp2.y = vp['h'] - objs[1].height
+    #     positions.append(imp2)
+    #
+    # if len(objs) >= 3:
+    #     imp3.x = vp['w'] - objs[2].width
+    #     imp3.y = vp['h'] + vp['gutter']
+    #     positions.append(imp3)
+    #
+    # if len(objs) >= 4:
+    #     imp4.x = vp['w'] + vp['gutter']
+    #     imp4.y = vp['h'] + vp['gutter']
+    #     positions.append(imp4)
+
     positions = []
-    imp1 = Posn(0, 0)
-    imp2 = Posn(0, 0)
-    imp3 = Posn(0, 0)
-    imp4 = Posn(0, 0)
-
-    imp1.x = vp['w'] - objs[0].width
-    imp1.y = vp['h'] - objs[0].height
-    positions.append(imp1)
-
-    # report_center = True
-
-    if len(objs) >= 2:
-        imp2.x = vp['w'] + vp['gutter']
-        imp2.y = vp['h'] - objs[1].height
-        positions.append(imp2)
-
-    if len(objs) >= 3:
-        imp3.x = vp['w'] - objs[2].width
-        imp3.y = vp['h'] + vp['gutter']
-        positions.append(imp3)
-
-    if len(objs) >= 4:
-        imp4.x = vp['w'] + vp['gutter']
-        imp4.y = vp['h'] + vp['gutter']
-        positions.append(imp4)
-
-    # if report_center:
-    #     print(f'centering im 1 using: {objs[0].width=}, {objs[0].height=}')
-    #     print(f'    moved to: {imp1.x}, {imp1.y}')
-    #     print(f'centering im 2 using: {objs[1].width=}, {objs[1].height=}')
-    #     print(f'    moved to: {imp2.x}, {imp2.y}')
-    #     print(f'centering im 3 ing: {objs[2].width=}, {objs[2].height=}')
-    #     print(f'    moved to: {imp3.x}, {imp3.y}')
-    #     print(f'centering im 4 using: {objs[3].width=}, {objs[3].height=}')
-    #     print(f'    moved to: {imp4.x}, {imp4.y}')
+    for n, item in enumerate(objs):
+        posn = Posn(0, 0)
+        posn.x += shifts[n][0]
+        posn.y += shifts[n][1]
+        positions.append(posn)
 
     return positions
 
