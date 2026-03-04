@@ -9,7 +9,6 @@ author: Russell Folks
 
 history:
 -------
-
 02-26-2025  creation
 03-01-2025  Add function calc_location to calculate x,y position for the next
             instance of each shape. Add default rectangle and arc sizes.
@@ -48,15 +47,24 @@ history:
 02-06-2025  For ShapeCanvas, add guard statements to shape manipulation functions.
 02-11-2026  In ShapeCanvas, reorder some methods; set_to_black now sets outline
             for the closest shape, not the selected one.
+02-12-2026  Remove old code, update inline docs.
+02-16-2026  Remove Alt-S to select shape. Add set_focus to report_cursor_posn
+            so key-bound functions can read the event in the ShapeCanvas.
+02-17-2026  For ShapeCanvas, in toggle_multi_select, remove highlight for
+            selected shape. (May not happen in select_shape, due to timing.)
+02-19-2026  For ShapeCanvas, handle the arrow shape.
+02-20-2026  For ShapeCanvas, debug set_to_black() to require canvas focus.
+02-23-2026  For ShapeCanvas, replace get_and_report_center() wih report_shape().
+            report_size() now assumes the selected object. Remove redundant
+            print statements in handle_key().
 """
 """
 TODO
     ShapeCanvas
-      1. ? re-order the methods
-      2. inline document event-detection that uses .bind vs .master.bind, and handle_key()
+      1. document event-detection that uses .bind vs .master.bind, and handle_key()
     General 
       1. Create a set of defaults (highlight color, default shape color...)
-         - signal these to the user vs. allow user to set (e.g. in a preferences file)
+         - signal these to the user vs. allow user to set (eventually in a preferences file)
 """
 import tkinter as tk
 
@@ -122,6 +130,7 @@ class MyCanvas(tk.Canvas):
 
     def report_cursor_posn(self, event) -> None:
         """Display x,y cursor position at lower right of the canvas."""
+        self.focus_set()
         self.delete('text1')
         self.update()
         width = self.winfo_width()
@@ -137,6 +146,11 @@ class MyCanvas(tk.Canvas):
     def clear_cursor_posn(self, event) -> None:
         """Remove displayed cursor position from the canvas."""
         self.delete('text1')
+        # remove focus from canvas (doesn't affect set_to_black, which was the intention)
+        # ...fixed this by checking for focused widget in set_to_black
+        # if no shape_frame parent for the Canvas...
+        # self.master.master.focus_set()
+        self.master.focus_set()
 
     def set_start(self, event) -> None:
         """Sets the coordinates of first, previous and start cursor locations.
@@ -149,7 +163,6 @@ class MyCanvas(tk.Canvas):
         - startx, starty: the last location clicked.
         - previousx, previousy: the next-to-last location clicked.
         """
-        print(f'in set_start: {event.x}, {event.y}')
         if self.firstx == 0 and self.firsty == 0:
             self.firstx, self.firsty = event.x, event.y
             self.previousx, self.previousy = event.x, event.y
@@ -347,13 +360,11 @@ class DrawCanvas(MyCanvas):
                 cnv.last_line = []
 
     def handle_key(self, event) -> None:
-        """Handle keypress with optional modifier.
+        """Handle keypress with optional modifier key.
 
         states: Shift is 1, Control is 4, Alt is 8
         This version does not differentiate between L and R modifier keys.
         """
-        # print('in handle_key:')
-        # print(f'    {event.keysym=}')
         match event.state:
             case 4:
                 # Control
@@ -447,167 +458,55 @@ class ShapeCanvas(MyCanvas):
         self.rect_width = 20
         self.rect_height = 20
 
-        self.arc_width = 30
-        self.arc_height = 25
+        self.arrow_width = 20
+        self.arrow_height = 20
 
         self.bind('<Button-1>', self.setup_shape)
         self.bind('<Shift-Motion>', self.drag_shape)
         # constrain to horizontal/vertical. Responds slowly...
         # self.bind('<Alt-Motion>', lambda ev, c=True: self.drag_shape(ev, c))
         self.bind('<Control-Motion>', self.resize_shape)
-        # works:
         self.bind('<Button-3>', self.toggle_selection)
         self.bind('<Control-Button-3>', self.toggle_multi_select)
 
-        # any key without modifier
-        self.master.master.bind('<Key>', self.handle_key)
+        # self.master.master.bind('<Shift-Key>', self.handle_key)
+        # self.master.master.bind('<Control-Key>', self.handle_key)
+        # self.master.master.bind('<Alt-Key>', self.handle_key)
+        #
+        # self.master.master.bind('<Control-Up>', self.nudge_size)
+        # self.master.master.bind('<Control-Down>', self.nudge_size)
+        # if there is no shape_frame...
+        self.master.bind('<Shift-Key>', self.handle_key)
+        self.master.bind('<Control-Key>', self.handle_key)
+        self.master.bind('<Alt-Key>', self.handle_key)
 
-        self.master.master.bind('<Shift-Key>', self.handle_key)
-        self.master.master.bind('<Control-Key>', self.handle_key)
-        self.master.master.bind('<Alt-Key>', self.handle_key)
-        # also works, but lambda not needed
-        # self.master.master.bind('<Alt-Key>', lambda ev: self.handle_key(ev))
+        self.master.bind('<Control-Up>', self.nudge_size)
+        self.master.bind('<Control-Down>', self.nudge_size)
 
-        # works:
-        # self.master.master.bind('<Shift-Up>', self.nudge_location)
-        # self.master.master.bind('<Shift-Down>', self.nudge_location)
-        # self.master.master.bind('<Shift-Left>', self.nudge_location)
-        # self.master.master.bind('<Shift-Right>', self.nudge_location)
-        # self.master.master.bind()
-
-        # works:
-        self.master.master.bind('<Control-Up>', self.nudge_size)
-        self.master.master.bind('<Control-Down>', self.nudge_size)
-
-    def calc_location(self, shape) -> tuple:
-        """Calculate size and location of the next shape to be defined.
-
-        Args:
-            shape (str): name description of the shape
-        Return:
-            (tuple): starting location x,y
-        """
-        start, end = 0, 0
-
-        match shape:
-            case 'oval':
-                xwidth, ywidth = self.oval_width, self.oval_height
-                start = self.startx - xwidth, self.starty - ywidth
-                end = self.startx + xwidth, self.starty + ywidth
-            case 'rectangle':
-                xwidth, ywidth = self.rect_width, self.rect_height
-                start = self.startx - xwidth, self.starty - ywidth
-                end = self.startx + xwidth, self.starty + ywidth
-            case 'arc':
-                xwidth, ywidth = self.arc_width, self.arc_height
-                start = self.startx - xwidth, self.starty - ywidth
-                end = self.startx + xwidth, self.starty + ywidth
-
-        return start, end
-
-    def create_shape(self,
-                     shape='oval',
-                     linecolor='black',
-                     width=1,
-                     tag='oval'):
-        """Create a new shape object on the canvas.
-
-        Args:
-            shape (str): name description of the shape
-            linecolor (str): color for drawing
-            width (int): width of the line drawn
-            tag (str): tag assigned to the object, indicating its type
-        """
-        id1 = None
-        match shape:
-            case 'oval':
-                taglist = ['oval', tag]
-                s, e = self.calc_location('oval')
-                id1 = self.create_oval(s,
-                                       e,
-                                       outline=linecolor,
-                                       width=width,
-                                       tags=taglist)
-            case 'rectangle':
-                taglist = ['rectangle', tag]
-                s, e = self.calc_location('rectangle')
-                id1 = self.create_rectangle(s,
-                                            e,
-                                            outline=linecolor,
-                                            width=width,
-                                            tags=taglist)
-            case 'arc':
-                taglist = ['arc', tag]
-                s, e = self.calc_location('arc')
-                id1 = self.create_arc(s,
-                                      e,
-                                      outline=linecolor,
-                                      width=width,
-                                      start=90,
-                                      extent=90,
-                                      tags=taglist)
-            case _:
-                pass
-
-        return id1
-
-    def set_next_tag(self, current_tag) -> int:
-        # find the number of tags that include the string current_tag
-        found_list = [t for t in self.shapetags if current_tag in t]
-
-        return len(found_list)
-
-    def setup_shape(self, event) -> None:
-        """Set up parameters for creating a new shape on the canvas.
-
-        Args:
-            event (event): L-mouse button
-
-        Gather parameters from instance attributes, call create_shape(),
-        manage the list of existing shape objects and their basic attributes.
-        """
-        self.set_start(event)
-
-        this_tag = self.next_shape + str(len(self.shapetags) + 1)
-        print(f'in setup_shape: {this_tag=}')
-
-        id1 = self.create_shape(shape=self.next_shape,
-                                linecolor=self.linecolor,
-                                width=self.linewidth,
-                                tag=this_tag)
-        if id1 is not None:
-            self.shapetags.append(this_tag)
-            this_center = [self.startx, self.starty]
-
-            self.report_center(this_center, self.linecolor)
-            self.selected = id1
-
-            # release multi-selection
-            self.multi_selected = []
-
-            # ? needed
-            # tags = self.itemcget(id1, 'tags')
-
-            self.motionx, self.motiony = self.startx, self.starty
-
-            newshape = Shape(id1, [self.startx, self.starty], self.linecolor)
-            self.objlist.append(newshape)
+        # Any key without modifier
+        # self.master.master.bind('<Key>', self.handle_key)
 
     def handle_key(self, event) -> None:
-        """Handle keypress with optional modifier.
+        """Handle keypress with optional modifier key.
 
         states: Shift is 1, Control is 4, Alt is 8
         This version does not differentiate between L and R modifier keys.
         """
-        # works: alternate way to get the modifier
-        if event.state & 0x1: print('    Shift')
-        if event.state & 0x4: print('    Control')
-        if event.state & 0x8: print('    Alt')
+        # works: alternate way to get the modifier key
+        # if event.state & 0x1:
+        #     print('    Shift')
+        # if event.state & 0x4:
+        #     print('    Control')
+        # if event.state & 0x8:
+        #     print('    Alt')
+        # print(f'{type(event.state)=}')
+        modifiers = {1: 'Shift', 4: 'control', 8: 'Alt'}
+        print(f'keys pressed: {modifiers[event.state]} + {event.keysym}')
 
         match event.state:
             case 1:
                 # Shift
-                print(f'Shift + {event.keysym}, {event.state=}')
+                # print(f'Shift + {event.keysym}, {event.state=}, {event.x}, {event.y}')
                 match event.keysym:
                     case 'x' | 'X':
                         print(f'    not handled')
@@ -619,46 +518,31 @@ class ShapeCanvas(MyCanvas):
                         print(f'    {event.keysym} not handled')
             case 4:
                 # Control
-                print(f'Control + {event.keysym}, {event.state=}')
+                # print(f'Control + {event.keysym}, {event.state=}, {event.x}, {event.y}')
                 match event.keysym:
                     case 'd':
+                        print('    duplicate selected shape')
+                        # print(f'    {event.x}, {event.y}')
                         the_id = self.selected
                         prev_shape = self.itemcget(the_id, 'tags').split(' ')[0]
                         prev_obj = next((obj for obj in self.objlist if obj.id == the_id), None)
-                        # print(f'    d: duplicate selected shape')
-                        # print('previous shape:')
-                        # print(f'    {prev_shape}, {prev_obj.center}, {prev_obj.linecolor}')
 
                         newid = self.create_shape(prev_shape, prev_obj.linecolor, self.linewidth, 'oval2')
                         coords = self.coords(the_id)
 
-
-                        # print(f'\n{coords=}')
+                        # Is this check necessary if we are using .coords?
                         # is there an object of this type at this location?
-                        # print(f'{self.objlist}')
                         if len(self.objlist) > 1:
                             # print(f'{self.objlist[-2].id=}')
                             t = self.gettags(self.objlist[-2].id)
 
-                            # if 'oval' in t:
-                            #     print('oval next last...')
-                            # else:
-                            #     print('NOT oval next last...')
-
-                        # if so, shift the loc of the 'new' object
-
-                        # set starting coordinates
                         coords_new = [n + 20 for n in coords]
-                        # self.coords(newid, coords_new)
 
-                        # check if these coords match the last-created obj
                         lastid = self.objlist[-1].id
                         lastcoords = self.coords(lastid)
-                        # print(f'last: {lastcoords}')
-                        # print(f'new:  {coords_new}')
-
                         newsize = [prev_obj.center[0] + 20, prev_obj.center[1] + 20]
 
+                        # If already an object at this location, offset again.
                         if lastcoords == coords_new:
                             coords_new = [n + 20 for n in coords_new]
                             newsize = [newsize[0] + 20, newsize[1] + 20]
@@ -707,15 +591,17 @@ class ShapeCanvas(MyCanvas):
                 print(f'Alt + {event.keysym}, {event.state=}, ')
                 match event.keysym:
                     case 'r':
-                        print(f'    reveal selected shape {event.x}, {event.y}')
+                        print(f'    reveal selected shape at: {event.x}, {event.y}')
                         self.show_selected()
-                    case 's':
-                        print(f'    select shape {event.x}, {event.y}')
-                        self.select_shape(event)
+                    # case 's':
+                    #     print(f'    select shape {event.x}, {event.y}')
+                    #     self.select_shape(event)
                     case 'b':
-                        print(f'    set linecolor to black {event.x}, {event.y}')
-                        # self.set_to_black('black')
+                        print(f'    set linecolor to black at: {event.x}, {event.y}')
                         self.set_to_black(event, 'black')
+                    case 'c':
+                        print(f'    set linecolor to current color at: {event.x}, {event.y}')
+                        self.set_to_black(event, self.linecolor)
                     case _:
                         print(f'    not handled')
             case 3 | 6 | 10:
@@ -723,9 +609,146 @@ class ShapeCanvas(MyCanvas):
                 # Caps Lock plus the modifier
                 print('is Caps Lock on?')
             case _:
-                # pass
-                print(f'...some other key...{event.keysym}, {event.state=}')
+                # No Modifier Key
+                print(f'...other key...{event.keysym}, {event.state=}')
                 # print(f'    Alt + {event.keysym}, {event.state=}, ')
+
+    def calc_location(self, shape) -> tuple:
+        """Calculate size and location of the next shape to be defined.
+
+        Args:
+            shape (str): name description of the shape
+        Return:
+            (tuple): starting location x,y
+        """
+        start, end = 0, 0
+
+        match shape:
+            case 'oval':
+                xwidth, ywidth = self.oval_width, self.oval_height
+                start = self.startx - xwidth, self.starty - ywidth
+                end = self.startx + xwidth, self.starty + ywidth
+            case 'rectangle':
+                xwidth, ywidth = self.rect_width, self.rect_height
+                start = self.startx - xwidth, self.starty - ywidth
+                end = self.startx + xwidth, self.starty + ywidth
+            case 'arrow':
+                xwidth, ywidth = self.arrow_width, self.arrow_height
+                start = self.startx, self.starty
+                end = self.startx + (xwidth + 20), self.starty + (ywidth + 20)
+            # case 'arc':
+            #     xwidth, ywidth = self.arc_width, self.arrow_height
+            #     start = self.startx - xwidth, self.starty - ywidth
+            #     end = self.startx + xwidth, self.starty + ywidth
+
+        return start, end
+
+    def set_next_tag(self, current_tag) -> int:
+        # find the number of tags that include the string current_tag
+        found_list = [t for t in self.shapetags if current_tag in t]
+
+        return len(found_list)
+
+    def setup_shape(self, event) -> None:
+        """Set up parameters for creating a new shape on the canvas.
+
+        Args:
+            event (event): L-mouse button
+
+        Gather parameters from instance attributes, call create_shape(),
+        manage the list of existing shape objects and their basic attributes.
+        """
+        self.set_start(event)
+
+        this_tag = self.next_shape + str(len(self.shapetags) + 1)
+
+        id1 = self.create_shape(shape=self.next_shape,
+                                linecolor=self.linecolor,
+                                width=self.linewidth,
+                                tag=this_tag)
+
+        if id1 is not None:
+            self.bind('<B1-Motion>', lambda ev=event, id=id1: self.drag_to_size(ev, id))
+
+            self.shapetags.append(this_tag)
+            this_center = [self.startx, self.starty]
+
+            # self.report_center(this_center, self.linecolor)
+            self.selected = id1
+            self.multi_selected = []
+
+            self.motionx, self.motiony = self.startx, self.starty
+
+            newshape = Shape(id1, [self.startx, self.starty], self.linecolor)
+            self.objlist.append(newshape)
+            # self.report_size(self.linecolor)
+            self.report_shape()
+
+            # enable set_to_black via the focus
+            self.focus_set()
+
+    def create_shape(self,
+                     shape='oval',
+                     linecolor='black',
+                     width=1,
+                     tag='oval'):
+        """Create a new shape object on the canvas.
+
+        Args:
+            shape (str): name description of the shape
+            linecolor (str): color for drawing
+            width (int): width of the line drawn
+            tag (str): tag assigned to the object, indicating its type
+        """
+        id1 = None
+        match shape:
+            case 'oval':
+                taglist = ['oval', tag]
+                s, e = self.calc_location('oval')
+                # breakpoint()
+                id1 = self.create_oval(s,
+                                       e,
+                                       outline=linecolor,
+                                       width=width,
+                                       tags=taglist)
+            case 'rectangle':
+                taglist = ['rectangle', tag]
+                s, e = self.calc_location('rectangle')
+                id1 = self.create_rectangle(s,
+                                            e,
+                                            outline=linecolor,
+                                            width=width,
+                                            tags=taglist)
+            case 'arc':
+                taglist = ['arc', tag]
+                s, e = self.calc_location('arc')
+                id1 = self.create_arc(s,
+                                      e,
+                                      outline=linecolor,
+                                      width=width,
+                                      start=90,
+                                      extent=90,
+                                      tags=taglist)
+            case 'arrow':
+                taglist = ['arrow', tag]
+                s, e = self.calc_location('arrow')
+                id1 = self.create_line(s,
+                                       e,
+                                       fill=linecolor,
+                                       width=width,
+                                       arrow='first',
+                                       arrowshape=(10, 12, 5),
+                                       tags=taglist)
+            case _:
+                pass
+
+        return id1
+
+    def drag_to_size(self, ev, id):
+        """When creating a shape, drag it to the desired initial size."""
+        loc = self.coords(id)
+        newloc = (loc[0], loc[1], ev.x, ev.y)
+        self.coords(id, newloc)
 
     def drag_shape(self, event, constrain=False):
         """Interactively moves a shape object on the canvas.
@@ -741,8 +764,8 @@ class ShapeCanvas(MyCanvas):
         shift = 1
         self.report_cursor_posn(event)
 
-        whichone = next(n for n in self.objlist if n.id == self.selected)
-        center_posn = whichone.center
+        # whichone = next(n for n in self.objlist if n.id == self.selected)
+        # center_posn = whichone.center
 
         if constrain:
             x_difference = abs(event.x - self.previousx)
@@ -769,46 +792,13 @@ class ShapeCanvas(MyCanvas):
         else:
             theshape = self.selected
             self.move(theshape, dx, dy)
-        # try remove:
-        # coords_float = self.coords(theshape)
-        # coords = [int(n) for n in coords_float]
-        # center_posn[0] = coords[0] + int((coords[2] - coords[0]) / 2)
-        # center_posn[1] = coords[1] + int((coords[3] - coords[1]) / 2)
 
-        t = self.gettags(self.selected)[1]
-
-        # outline = self.itemcget(self.selected, 'outline')
-        # self.report_center(center_posn, outline)
-        # try:
-        whichone = next(n for n in self.objlist if n.id == self.selected)
-        whichone.center = list(sum(n) for n in zip(whichone.center, (dx, dy)))
-
-        outline = whichone.linecolor
-        self.report_center(whichone.center, outline)
-
-    def nudge_location_orig(self, event, dx=None, dy=None) -> None:
-        """Move the selected shape object by one pixel, in one of 4 directions.
-
-        Args:
-            event (event): Shift key + arrow key
-            dx (int): number of pixels to move horizontally
-            dy (int): number of pixels to move vertically
-        """
-        if len(self.multi_selected) > 0:
-            # multi-selected shape(s)
-            for n, item in enumerate(self.multi_selected):
-                # print(f'{dx=}, {dy=}')
-                self.move(item, dx, dy)
-                self.objlist[n].center[0] += dx
-                self.objlist[n].center[1] += dy
-        else:
-            theshape = self.selected
-            self.move(theshape, dx, dy)
+        # t = self.gettags(self.selected)[1]
 
         whichone = next(n for n in self.objlist if n.id == self.selected)
         whichone.center = list(sum(n) for n in zip(whichone.center, (dx, dy)))
-
         outline = whichone.linecolor
+
         self.report_center(whichone.center, outline)
 
     def nudge_location(self, event) -> None:
@@ -848,8 +838,8 @@ class ShapeCanvas(MyCanvas):
 
         whichone = next(n for n in self.objlist if n.id == self.selected)
         whichone.center = list(sum(n) for n in zip(whichone.center, (dx, dy)))
-
         outline = whichone.linecolor
+
         self.report_center(whichone.center, outline)
 
     def resize_shape(self, event):
@@ -860,21 +850,11 @@ class ShapeCanvas(MyCanvas):
         """
         if self.selected is None: return
         theshape = self.selected
+        dx = 0
+        dy = 0
         whichone = next(n for n in self.objlist if n.id == self.selected)
         center_posn = whichone.center
 
-        # same logic as drag
-        """
-        if len(self.multi_selected) > 0:
-            for n, item in enumerate(self.multi_selected):
-                self.move(item, dx, dy)
-            theshape = self.multi_selected[-1]
-        else:
-            theshape = self.selected
-            self.move(theshape, dx, dy)
-        """
-
-        # if theshape in self.multi_selected:
         if len(self.multi_selected) > 0:
             group = [n for n in self.objlist if n.id in self.multi_selected]
 
@@ -886,70 +866,17 @@ class ShapeCanvas(MyCanvas):
                     self.scale(item.id, item.center[0], item.center[1], 0.99, 0.99)
         else:
             if event.y < self.motiony:
-                # center_posn is not a dict, might be clearer if it were...
+                # might be clearer if center_posn was a dict like this...
                 # self.scale(theshape, center_posn['x'], center_posn['y'], 1.01, 1.01)
                 self.scale(theshape, center_posn[0], center_posn[1], 1.01, 1.01)
             if event.y > self.motiony:
                 self.scale(theshape, center_posn[0], center_posn[1], 0.99, 0.99)
+        self.report_size(whichone.linecolor)
 
         self.motionx, self.motiony = event.x, event.y
 
-    def nudge_size_orig(self, event):
-        if len(self.multi_selected) > 0:
-            for n, item in enumerate(self.multi_selected):
-                # whichone = next(n for n in self.objlist if n.id == item)
-                # center_posn = whichone.center
-                # self.scale(item, center_posn[0], center_posn[1], 1.05, 1.05)
-
-                # loc = self.coords(item)
-                # start_coords = list(loc)
-                #
-                # new_coords = ()
-                # if event.keysym == "Up":
-                #     # larger bounding box
-                #     new_coords = (start_coords[0] - 1, start_coords[1] - 1, start_coords[2] + 1, start_coords[3] + 1)
-                # else:
-                #     if event.keysym == "Down":
-                #         # smaller bounding box
-                #         new_coords = (start_coords[0] + 1, start_coords[1] + 1, start_coords[2] - 1, start_coords[3] - 1)
-                #
-                # self.coords(item, new_coords)
-
-
-                new_coords = ()
-                if event.keysym == "Up":
-                    # larger bounding box
-                    loc = self.coords(item)
-                    start_coords = list(loc)
-                    new_coords = (start_coords[0] - 1, start_coords[1] - 1, start_coords[2] + 1, start_coords[3] + 1)
-                else:
-                    if event.keysym == "Down":
-                        # smaller bounding box
-                        loc = self.coords(item)
-                        start_coords = list(loc)
-                        new_coords = (start_coords[0] + 1, start_coords[1] + 1, start_coords[2] - 1, start_coords[3] - 1)
-
-                self.coords(item, new_coords)
-
-
-
-        else:
-            theshape = self.selected
-            # whichone = next(n for n in self.objlist if n.id == theshape)
-            # center_posn = whichone.center
-            loc = self.coords(theshape)
-            start_coords = list(loc)
-
-            new_coords = ()
-            if event.keysym == "Up":
-                # larger bounding box
-                new_coords = (start_coords[0] - 1, start_coords[1] - 1, start_coords[2] + 1, start_coords[3] + 1)
-            else:
-                if event.keysym == "Down":
-                    # smaller bounding box
-                    new_coords = (start_coords[0] + 1, start_coords[1] + 1, start_coords[2] - 1, start_coords[3] - 1)
-
-            self.coords(theshape, new_coords)
+        # outline = whichone.linecolor
+        # self.report_size(self.linecolor)
 
     def nudge_size(self, event):
         if self.selected is None: return
@@ -978,22 +905,25 @@ class ShapeCanvas(MyCanvas):
             )
 
             self.coords(item, new_coords)
-
-    def get_and_report_center(self) -> None:
-        """Get center of current shape and call a class method to report it."""
-        print(f'in get_and_report_center:\n{self.objlist=}')
         whichone = next(n for n in self.objlist if n.id == self.selected)
-        print(f'    {whichone.id=}, {self.selected=}')
-        center = whichone.center
-        outline = whichone.linecolor
-
-        self.report_center(center, outline)
+        self.report_size(whichone.linecolor)
 
     def set_to_black(self, event, color) -> None:
         """Set closest shape to black outline."""
+        # If canvas doesn't have focus, find_closest has wrong x,y
+        if self.focus_get() != self:
+            print('exiting set_to_black...')
+            return
+
         if len(self.objlist) == 0: return
         found = self.find_closest(event.x, event.y, halo=25)
-        self.itemconfig(found, outline=color)
+        taglist = self.itemcget(found, 'tags')
+        print(f'{taglist=}')
+        if 'arrow' in taglist:
+            self.itemconfig(found, fill=color)
+        else:
+            # if isinstance(taglist, list):
+            self.itemconfig(found, outline=color)
 
         whichone = next(n for n in self.objlist if n.id == found[0])
         whichone.linecolor = color
@@ -1017,72 +947,87 @@ class ShapeCanvas(MyCanvas):
             event (event): Shift key + R-mouse click
         """
         # TODO: handle the case of the last shape deleted.
+        mark_return = False
         for n, item in enumerate(self.shapetags):
             self.itemconfigure(item, fill='')
 
         # Set last-created item to be selected
         lastid = self.find_withtag(self.shapetags[-1])[0]
         print('unselect...')
+
         self.itemconfigure(lastid, fill='#ffa')
-        self.after(500, lambda: self.itemconfigure(lastid, fill=''))
+
+        if 'arrow' in self.gettags(lastid):
+            whichone = next(n for n in self.objlist if n.id == lastid)
+            self.after(400, lambda: self.itemconfigure(lastid, fill=whichone.linecolor))
+        else:
+            self.after(400, lambda: self.itemconfigure(lastid, fill=''))
+
         self.selected = lastid
 
-        self.get_and_report_center()
+        # self.get_and_report_center()
+        self.report_shape()
+        mark_return = True
+        if mark_return: return
 
     def select_shape(self, event) -> None:
         """Sets the shape nearest the cursor as the 'selected' shape.
 
         Args:
-            event (event): R-mouse click
+            event: R-mouse click
 
         A class attribute keeps track of the currently selected shape, by its id. The
         shape is highlighted with a color fill.
         """
-        print('in select_shape...')
-        print(f'    {event.state=}')
-        # print(f'{self.shapetags=}')
-        print(f'    {event.x}, {event.y}')
+        # print('in select_shape...')
+        # print(f'    {event.state=}, {event.x}, {event.y}')
 
         # remove highlight from all shapes
         for item in enumerate(self.shapetags):
-            self.itemconfigure(item[1], fill='')
+            if not 'arrow' in item[1]:
+                self.itemconfigure(item[1], fill='')
 
         found = self.find_closest(event.x, event.y, halo=25)
-        print(f'{found=}')
         if len(found) > 0:
-            # print(f'    selecting...')
+            # try this to exclude the image object (cursor outside the halo for a shape object)
+            if 'image' in self.gettags(found[0]):
+                print('found image, returning...')
+                # break out of the 'if'...the 'return' below will exit the fxn
+
             self.selected = found[0]
             print(f'    {self.selected=}')
             print(f'    {self.gettags(self.selected)=}')
 
             # highlight the seleced shape
             self.itemconfigure(self.selected, fill='#ffa')
-            self.after(500, lambda: self.itemconfigure(self.selected, fill=''))
-            self.get_and_report_center()
+            if 'arrow' in self.gettags(self.selected):
+                whichone = next(n for n in self.objlist if n.id == self.selected)
+                self.after(500, lambda: self.itemconfigure(self.selected, fill=whichone.linecolor))
+            else:
+                self.after(500, lambda: self.itemconfigure(self.selected, fill=''))
+            # self.get_and_report_center()
+            self.report_shape()
         else:
             print('no object found')
-        # print('returning from select_shape...')
 
         return
 
     def toggle_multi_select(self, event) -> None:
         if self.selected is None: return
-        orig_sel = self.selected
-
+        original_selected = self.selected
+        # for arrows
+        whichone = next(n for n in self.objlist if n.id == original_selected)
         self.select_shape(event)
-
         the_id = self.selected
-        print('in toggle_multi_select...')
 
         # set selection indicator
-        self.itemconfigure(the_id, outline='grey')
-
-        print(f'    {orig_sel=}')
-        print(f'    {self.selected=}')
-        print(f'    {self.multi_selected=}')
+        if not 'arrow' in self.gettags(the_id):
+            self.itemconfigure(the_id, outline='grey')
+        else:
+            self.itemconfigure(the_id, fill='grey')
 
         if the_id in self.multi_selected:
-            print(f'    removing {the_id}')
+            # print(f'    removing {the_id}')
             self.multi_selected.remove(the_id)
             # revert to the original linecolor
             lc = ''
@@ -1090,17 +1035,24 @@ class ShapeCanvas(MyCanvas):
                 if shape.id == the_id:
                     lc = self.objlist[n].linecolor
             if lc != '':
-                self.itemconfigure(the_id, outline=lc)
+                if 'arrow' in self.gettags(the_id):
+                    self.itemconfigure(the_id, fill=lc)
+                else:
+                    self.itemconfigure(the_id, outline=lc)
 
-            # try:
-            # set to the original selected obj (before select_shape changed it)
-            self.selected = orig_sel
+            # self.selected = original_selected
         else:
-            print(f'adding {the_id} to multi-selection:')
+            # print(f'adding {the_id} to multi-selection:')
             self.multi_selected.append(the_id)
-            print(f'{self.multi_selected=}')
+            # print(f'{self.multi_selected=}')
             # self.selected = self.multi_selected[-1]
-            self.selected = orig_sel
+            # self.selected = original_selected
+        self.selected = original_selected
+
+        if 'arrow' in self.gettags(self.selected):
+            self.after(500, lambda: self.itemconfigure(the_id, fill=whichone.linecolor))
+        else:
+            self.after(500, lambda: self.itemconfigure(the_id, fill=''))
 
     def release_multi_selection(self, event):
         # restore all shapes to original linecolor
@@ -1117,7 +1069,32 @@ class ShapeCanvas(MyCanvas):
     def show_selected(self):
         print('show_selected')
         self.itemconfigure(self.selected, fill='#ffa')
-        self.after(500, lambda: self.itemconfigure(self.selected, fill=''))
+        if not 'arrow' in self.gettags(self.selected):
+            self.after(500, lambda: self.itemconfigure(self.selected, fill=''))
+        else:
+            whichone = next(n for n in self.objlist if n.id == lastid)
+            self.after(500, lambda: self.itemconfigure(self.selected, fill=whichone.linecolor))
+
+    def get_and_report_center(self) -> None:
+        """Get center of current shape and call a class method to report it."""
+        print(f'in get_and_report_center')
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        # print(f'    {whichone.id=}, {self.selected=}')
+        center = whichone.center
+        outline = whichone.linecolor
+
+        self.report_center(center, outline)
+
+    # Will replace get_and_report_center
+    def report_shape(self) -> None:
+        """Get center of current shape and call a class method to report it."""
+        # print(f'in report_shape')
+        whichone = next(n for n in self.objlist if n.id == self.selected)
+        center = whichone.center
+        outline = whichone.linecolor
+
+        self.report_center(center, outline)
+        self.report_size(outline)
 
     def report_center(self,
                       center: dict,
@@ -1130,13 +1107,29 @@ class ShapeCanvas(MyCanvas):
         """
         self.delete('center_text')
         textstr = f'{center[0]}, {center[1]}'
-
         self.create_text(10,
                          12,
                          fill=color,
                          text=textstr,
                          anchor='w',
                          tags='center_text')
+
+    def report_size(self, color: str) -> None:
+        """Report size of the current object."""
+        self.delete('size_text')
+
+        sc = self.coords(self.selected)
+        wid = int((sc[2] - sc[0]) / 2)
+        ht = int((sc[3] - sc[1]) / 2)
+        textstr = f'{wid}, {ht}'
+
+        self.create_text(10,
+                         26,
+                         fill=color,
+                         text=textstr,
+                         anchor='w',
+                         tags='size_text')
+
 
     # NOT CURRENTLY USED
     def set_shape_parameter(self, p, val):
