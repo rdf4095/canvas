@@ -1,0 +1,14 @@
+ShapeCanvas class
+    - nudge size should probably use scale() instead of coords(). Coords() acts
+    on the bounding box of the shape object, and so it will change the shape of the
+    object, if the ratio of horizontal to vertical size is not accounted for.
+    The change in shape will be gradual (it's one pixel at a time), and will only
+    become apparent after many nudge actions.
+    - Gradually changing the shape, i.e. changing the short axis of an ellipse (oval),
+    may be an effect you want. If so, it should probably be a separate control,
+    and not a "nudge for size", which assumes both axes are changed symmetrically.
+    - When using scale(), 1.01 and 0.99 (1% at a time) may not be enough of a change per
+    nudge. Test this to see if it is enough.
+    - Inceasing the scale factors will quickly result in large changes to the object
+    with each nudge. this suggests that you cculd implement "coarse" and "fine"
+    adjustments, say with Ctrl-arrowKey and Shift-Ctrl-arrowKey respectively.
