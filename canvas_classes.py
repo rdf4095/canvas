@@ -62,6 +62,8 @@ history:
             remove some old code.
 03-16-2026  set_to_black() is now set_to_color(). Refactor DrawCanvas
             handle_key method. Move docstring notes to a scratch file.
+04-01-2026  ShapeCanvas: object size now updates as it is created with drag.
+            unselect_shape() and object delete now handle 'no objects' case.
 """
 import tkinter as tk
 
@@ -87,7 +89,9 @@ class MyCanvas(tk.Canvas):
         clear_cursor_posn: delete cursor location text
         set_start: upon L-mouse click, store x,y cursor location
     """
-    def __init__(self, parent,
+
+    def __init__(self,
+                 parent,
                  width=320,
                  height=320,
                  background='#ffa'
@@ -178,7 +182,9 @@ class DrawCanvas(MyCanvas):
         undo_line: remove last-drawn line
         draw_path: create a series of lines following the cursor
     """
-    def __init__(self, parent,
+
+    def __init__(self,
+                 parent,
                  mode='lines',
                  **kwargs
                  ):
@@ -223,8 +229,6 @@ class DrawCanvas(MyCanvas):
                 self.bind('<Double-1>', self.connect_lines)
                 self.bind('<Button-3>', self.undo_line)
 
-                # works, direct bind for a single key:
-                # self.master.bind('<Key>', self.handle_key)
         # works for both modes,
         # if erase_drawing finds the matching DrawCanvas instance:
         self.master.bind('<Key>', self.handle_key)
@@ -262,7 +266,6 @@ class DrawCanvas(MyCanvas):
             case _:
                 # No Modifier Key
                 print(f'...other key...{event.keysym}, {event.state=}')
-                # print(f'    Alt + {event.keysym}, {event.state=}, ')
 
     def draw_line(self, event) -> None:
         """If past starting posn, draw a line from previous to current posn."""
@@ -378,7 +381,10 @@ class DrawCanvas(MyCanvas):
 
 
 class Shape():
-    def __init__(self, id, center=[0, 0], lc='black'):
+    def __init__(self,
+                 id,
+                 center=[0, 0],
+                 lc='black'):
         self.id = id
         self.center = center
         self.linecolor = lc
@@ -448,6 +454,9 @@ class ShapeCanvas(MyCanvas):
 
         self.arrow_width = 20
         self.arrow_height = 20
+
+        self.arc_width = 20
+        self.arc_height = 20
 
         self.bind('<Button-1>', self.setup_shape)
         self.bind('<Shift-Motion>', self.drag_shape)
@@ -541,7 +550,8 @@ class ShapeCanvas(MyCanvas):
                         self.show_selected()
                     case 'x':
                         # Delete selected shape
-                        print(f'    delete selected shape')
+                        print(f'    delete selected shape: {self.selected}')
+                        if len(self.objlist) == 0: return
 
                         # ? don't need this unless we are deleting all shapes
                         all_ids = [i.id for i in self.objlist]
@@ -617,11 +627,10 @@ class ShapeCanvas(MyCanvas):
                 xwidth, ywidth = self.arrow_width, self.arrow_height
                 start = self.startx, self.starty
                 end = self.startx + (xwidth + 20), self.starty + (ywidth + 20)
-            # add this back in when we begin the structured_draw app
-            # case 'arc':
-            #     xwidth, ywidth = self.arc_width, self.arrow_height
-            #     start = self.startx - xwidth, self.starty - ywidth
-            #     end = self.startx + xwidth, self.starty + ywidth
+            case 'arc':
+                xwidth, ywidth = self.arc_width, self.arc_height
+                start = self.startx - xwidth, self.starty - ywidth
+                end = self.startx + xwidth, self.starty + ywidth
 
         return start, end
 
@@ -726,13 +735,18 @@ class ShapeCanvas(MyCanvas):
 
         return id1
 
-    def drag_to_size(self, ev, id):
+    def drag_to_size(self,
+                     ev,
+                     id):
         """While creating a shape, drag it to the desired initial size."""
         loc = self.coords(id)
         newloc = (loc[0], loc[1], ev.x, ev.y)
         self.coords(id, newloc)
+        self.report_size(self.linecolor)
 
-    def drag_shape(self, event, constrain=False):
+    def drag_shape(self,
+                   event,
+                   constrain=False):
         """Interactively moves a shape object on the canvas.
 
         Args:
@@ -849,6 +863,7 @@ class ShapeCanvas(MyCanvas):
                 self.scale(theshape, center_posn[0], center_posn[1], 1.01, 1.01)
             if event.y > self.motiony:
                 self.scale(theshape, center_posn[0], center_posn[1], 0.99, 0.99)
+        # print(f'{self.coords(self.selected)=}')
         self.report_size(whichone.linecolor)
 
         self.motionx, self.motiony = event.x, event.y
@@ -887,7 +902,9 @@ class ShapeCanvas(MyCanvas):
         whichone = next(n for n in self.objlist if n.id == self.selected)
         self.report_size(whichone.linecolor)
 
-    def set_to_color(self, event, color) -> None:
+    def set_to_color(self,
+                     event,
+                     color) -> None:
         """Set closest shape to a black outline."""
         # If canvas doesn't have focus, find_closest gives wrong x,y
         if self.focus_get() != self:
@@ -927,7 +944,8 @@ class ShapeCanvas(MyCanvas):
         Args:
             event (event): Shift key + R-mouse click
         """
-        # TODO: handle the case of the last shape deleted.
+        if self.selected is None: return
+
         mark_return = False
         for n, item in enumerate(self.shapetags):
             self.itemconfigure(item, fill='')
@@ -1069,6 +1087,8 @@ class ShapeCanvas(MyCanvas):
     # Will replace get_and_report_center
     def report_shape(self) -> None:
         """Get center of current shape and call a class method to report it."""
+        if self.selected is None: return
+
         whichone = next(n for n in self.objlist if n.id == self.selected)
         center = whichone.center
         outline = whichone.linecolor
@@ -1110,10 +1130,8 @@ class ShapeCanvas(MyCanvas):
                          anchor='w',
                          tags='size_text')
 
-
-    # NOT CURRENTLY USED
-    # def set_shape_parameter(self, p, val):
-    #     self.__dict__[p] = val
+    def set_shape_parameter(self, p, val):
+        self.__dict__[p] = val
 
 
 if __name__ == '__main__':
