@@ -12,3 +12,12 @@ ShapeCanvas class
     - Inceasing the scale factors will quickly result in large changes to the object
     with each nudge. this suggests that you cculd implement "coarse" and "fine"
     adjustments, say with Ctrl-arrowKey and Shift-Ctrl-arrowKey respectively.
+
+
+        # works: alternate way to get the modifier key
+        # if event.state & 0x1:
+        #     print('    Shift')
+        # if event.state & 0x4:
+        #     print('    Control')
+        # if event.state & 0x8:
+        #     print('    Alt')

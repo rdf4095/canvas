@@ -18,18 +18,7 @@ author: Russell Folks
 history:
 -------
 03-04-2024  creation
-03-14-2024  Add a section for utility functions.
-07-28-2024  Update function docstrings.
-08-03-2024  Added comments section to module header.
-08-16-2024  Edit get_posn to handle 2 or 3 images.
-08-19-2024  Add alignment options: vertical center, horizontal right.
-08-24-2024  Add function handle_extra to calculate position for images if
-            there are more than two of them. Add type hinting for functions
-            that don't have it.
-09-07-2024  Add get_1_posn(), to determine a single image position.
-09-12-2024  Add get_positions() to determine up to four image positions.
-            Remove handle_extra().
-09-13-2024  Add type hinting to get_1_posn and get_positions.
+... see history.txt
 10-23-2024  Add function set_canv_centered, to move all images toward the
             center of the canvas, allowing for the viewport gutter.
 10-26-2024  Update set_canv_centered() to handle less than 4 images.
@@ -43,7 +32,7 @@ history:
 """
 """
 TODO:
-    1. Try Posn as a class instead of a type.
+    1. Try Posn as a class instead of a type. It should be in the image module...
 """
 from PIL import ImageTk
 import tkinter as tk
@@ -76,8 +65,6 @@ def compare_ratios(vp: float,
 def posn_init(self, x: int, y: int):
     self.x = x
     self.y = y
-
-
 Posn = type('Posn', (), {"__init__": posn_init})
 
 
@@ -89,11 +76,12 @@ def get_positions(vp: dict,
     Images are assumed to be gridded in the Canvas as follows:
     1  2
     3  4
+
     Arguments:
-    vp: a conceptual 'viewport' or area within which the image is placed,
-    assumed to be the same width/height for each image.
-    objects: list of images.
-    arrange: flags for horizontal and vertical alignment in the vp.
+        vp: a conceptual 'viewport' or area within which the image is placed,
+            assumed to be the same width/height for each image.
+        objects: list of images.
+        arrange: flags for horizontal and vertical alignment in the vp.
     """
     positions = []
 
@@ -122,23 +110,14 @@ def get_positions(vp: dict,
     #     print(f'{item.x}, {item.y}')
     #     print(f'    {pos_list[n].x}, {pos_list[n].y}')
 
-    # alternative:
-    # Define the location shift for each image in the canvas grid:
-    # 1  2
-    # 3  4
     shift_right = vp['w'] + vp['gutter']
     shift_down = vp['h'] + vp['gutter']
-    # shifts = [
-    #     (0, 0),                                            # 1: no shift
-    #     (vp['w'] + vp['gutter'], 0),                       # 2: right
-    #     (0, vp['h'] + vp['gutter']),                       # 3: down
-    #     (vp['w'] + vp['gutter'], vp['h'] + vp['gutter'])   # 4: right, down
-    # ]
+
     shifts = [
-        (0, 0),
-        (shift_right, 0),
-        (0, shift_down),
-        (shift_right, shift_down)
+        (0, 0),  # 1: no shift
+        (shift_right, 0),  # 2: right
+        (0, shift_down),  # 3: down
+        (shift_right, shift_down)  # 4: right, down
     ]
     positions = []
     for n, item in enumerate(objects):
@@ -189,9 +168,9 @@ def set_canv_centered(vp: dict, objs: list) -> list:
     1  2
     3  4
     Arguments:
-    vp: a conceptual 'viewport' or area within which the image is placed,
-    assumed to be the same width/height for each image.
-    objs: list of images.
+        vp: a conceptual 'viewport' or area within which the image is placed,
+            assumed to be the same width/height for each image.
+        objs: list of images.
     """
     # imp1 = Posn(0, 0)
     # imp2 = Posn(0, 0)
@@ -262,7 +241,7 @@ def set_canv_centered(vp: dict, objs: list) -> list:
 
 def init_image_size(im: object,
                     vp: dict) -> dict:
-    """Set image display size and shape, based on the defined viewport size."""
+    """Set image display size & shape, based on the viewport (`vp`) size."""
     vp_ratio = vp['w'] / vp['h']
     im_ratio = im.width / im.height
 
@@ -298,6 +277,7 @@ def resize_images(ev: tk.Event,
 
 
 def calc_resize_to_vp(vp: dict, im: object) -> dict:
+    """Return the size to which an image will be scaled."""
     canv_width = vp['w']
     canv_height = vp['h']
 
@@ -321,7 +301,7 @@ def resize_viewport(ev, vp, flag):
     vp['w'] = ev.width
     vp['h'] = ev.height
 
-    flag = True
+    # flag = True
     # canv.configure(width=vp['w'], height=vp['h'])
     # canv.update()
     # print('in canvas_ui/resize_viewport')
