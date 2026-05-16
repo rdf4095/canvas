@@ -35,6 +35,8 @@ history:
             the draw-shape, delete-open-shape and delete-all functionality.
 05-01-2026  Add object for user help. No actual help yet.
 05-08-2026  Debug erase_drawing to work for freehand or line mode.
+05-15-2026  DrawCanvas: implement shapes for freehand mode. Each shape is a
+            collection of lines, defined by a boolean flag during the draw.
 """
 import tkinter as tk
 
@@ -192,18 +194,19 @@ class DrawCanvas(MyCanvas):
         self.line_count = 0
         self.linetags = []
 
-        # remove these after testing the new vars:
-        # self.last_line = []
         self.last_shape = []
 
-        # new vars
         self.freehand_started = False
+        self.freeshape_started = False
         self.freetags = []
-        # self.freetags_copy = []
+        self.freeshapes = []  # not yet appending to this...
         self.lineshapes = []
-        self.freeshapes = []
+        # need this?
+        self.linestart = 0  # next linemode line # to start a new shape
 
-        # self.freehand_started = False
+        # possibly disregard the drawing mode
+        # self.shapes = []
+
         # remove this after testing the new vars:
         self.freehand_tagname = None  # is the default tagname == '' ?
 
@@ -218,13 +221,13 @@ class DrawCanvas(MyCanvas):
 
                 # freehand could bind Button-3 to undo_line, now that we are
                 # assigning one tagname to all lines in a drawing
-                # (drawing == from mouse-down to mouse-up).
+                # (a drawing == from mouse-down to mouse-up).
             case 'lines':
                 self.bind('<Control-Button-1>', self.draw_line)
                 self.bind('<Control-Double-1>', self.connect_lines)
                 self.bind('<Button-3>', lambda ev, d='lines': self.undo_line(ev, d))
 
-        # This doesn't currently do anything...
+        # This doesn't currently do anything useful...
         self.master.bind('<Key>', self.handle_key)
 
     def handle_key(self, event) -> None:
@@ -245,16 +248,20 @@ class DrawCanvas(MyCanvas):
                 # Control
                 match event.keysym:
                     case 'f' | 'F':
-                        # print(f'    erase freeehand drawing')
+                        print(f'    erase last freeehand drawing')
                         self.erase_drawing(event, 'freehand')
                     case 'l' | 'L':
-                        print(f'    erase line drawing')
+                        print(f'    erase last line drawing')
                         self.erase_drawing(event, 'lines')
+                    case 's':
+                        self.erase_shape(event, 'freehand')
                     case _:
                         print(f'    not handled: {event.state=}, {event.keysym=}')
             case 5:
                 # Control + Shift
-                print('    Shift|Control')
+                # This should be: erase last shape
+                # Need a specific bind in the class init to erase all,
+                # like maybe Control-a, or to be certain, Control-Shift-a...
                 match event.keysym:
                     case 'f' | 'F':
                         print(f'    erase all freehand')
@@ -262,6 +269,18 @@ class DrawCanvas(MyCanvas):
                     case 'l' | 'L':
                         print(f'    erase all lines')
                         self.erase_all(event, 'lines')
+            case 8:
+                # Alt
+                match event.keysym:
+                    case 's':
+                        # put this in a function, or use get_canvas()
+                        canv = self.get_canvas('freehand')
+                        canv.freeshape_started = True
+                        canv.freeshapes.append([])
+                    case 'e':
+                        # put this in a function, or use get_canvas()
+                        canv = self.get_canvas('freehand')
+                        canv.freeshape_started = False
             case _:
                 # No Modifier Key
                 print(f'...other key...{event.keysym}, {event.state=}')
@@ -275,13 +294,6 @@ class DrawCanvas(MyCanvas):
             return
 
         if self.mode == 'freehand':
-            # may not need freehand_tagname...
-            # if self.freehand_tagname is None:
-            #     line_count = len(freetags) + 1
-            #     self.freehand_tagname = 'freetag' + str(line_count)
-            # tagname = self.freehand_tagname
-            # self.freetags.append(tagname)
-            # print(f'    {self.freehand_started}')
             if self.freehand_started is False:
                 n = len(self.freetags) + 1
                 tagname = 'freetag' + str(n)
@@ -289,22 +301,12 @@ class DrawCanvas(MyCanvas):
                 self.freetags.append(tagname)
             else:
                 tagname = self.freetags[-1]
-
         else:
-            # line_count = len(linetags) + 1
-            # tagname = 'linetag' + str(line_count)
-            # self.linetags.append(tagname)
-
             n = len(self.linetags) + 1
             tagname = 'linetag' + str(n)
 
             # this should probably happen after a successful create_line...
             self.linetags.append(tagname)
-
-            self.lineshapes.append([])
-            self.lineshapes[-1].append(tagname)
-            # ?? or:
-            # self.lineshapes.append([tagname])
 
         self.create_line(self.startx, self.starty,
                          event.x, event.y,
@@ -314,17 +316,14 @@ class DrawCanvas(MyCanvas):
 
         self.set_start(event)
 
-        # line mode:
-        # ---------
-        # If Control, end the line(s) without closing.
-        # The unclosed "shape" can still be deleted
-
-        # ??? still need this. It doesn't reference .freetags...
+        # In line mode, allow a shape to be ended without closing.
+        # This should probably be moved inside the mode 'if'
         if event.state == 5:  # Control=4 + Shift=1
+            print('draw_line, state==5')
             self.firstx, self.firsty = 0, 0
-            self.last_shape = self.linetags.copy()
+            # wrong...
+            # self.last_shape = self.linetags.copy()
             self.points = []
-            # self.linetags = []
 
     def connect_lines(self, event) -> None:
         """In line mode, handle double-L click: draw lines to close a shape.
@@ -333,10 +332,7 @@ class DrawCanvas(MyCanvas):
         position to the start posn, this handler draws a line from the current
         to the previous position.
         """
-        # in future, can we use lines[] instead of line_count ?
-        # self.line_count += 1
-        # tagname = 'line' + str(self.line_count)
-
+        print('in connect_lines...')
         tagname = 'linetag' + str(len(self.linetags) + 1)
 
         self.create_line(event.x, event.y,
@@ -349,18 +345,44 @@ class DrawCanvas(MyCanvas):
         self.firstx, self.firsty = 0, 0
 
         # Remember tags so the shape (most recent set of lines) can be deleted.
-        self.last_shape = self.linetags.copy()
-
-        # update shapes list...
+        # self.last_shape = self.linetags.copy()
 
         # The current shape is completed.
         self.points = []
 
-    def undo_line(self, event, drawtype='lines') -> None:
-        """Remove last line and make previous cursor posn the current posn."""
-        if (self.firstx, self.firsty) == (0, 0):
-            return
+        # Add a shape (a completed drawing) to the list
+        # ...see the note in the list of instance vars
+        self.lineshapes.append(self.linetags[self.linestart:])
+        # print(f'    {self.linetags=}')
+        print(f'    {self.lineshapes=}')
 
+        self.linestart = len(self.linetags)
+
+    def reset_line(self, event) -> None:
+        """In freehand mode, handle mouseup: complete a line."""
+        print('in reset_line...')
+
+        self.freehand_started = False
+
+        # Add a shape (a completed drawing) to the list
+        if self.freeshape_started:
+            self.freeshapes[-1].append(self.freetags[-1])
+        # else:
+        #     self.freeshapes.append([self.freetags[-1]])
+
+        print(f'    {self.freetags=}')
+        print(f'    {self.freeshapes=}')
+
+    def undo_line(self,
+                  event,
+                  drawtype='lines') -> None:
+        """Remove last line and make previous cursor posn the current posn."""
+        # If we don't do this, then we need to
+        # set x,y = 0,0 in the 'last' undo, i.e. len(linetags) == 0
+        # if (self.firstx, self.firsty) == (0, 0):
+        #     return
+
+        print('in undo_line...')
         if drawtype == 'lines':
             if len(self.linetags) > 0:
                 self.delete(self.linetags[-1])
@@ -373,17 +395,21 @@ class DrawCanvas(MyCanvas):
             if len(self.freetags) > 0:
                 self.delete(self.freetags[-1])
                 self.freetags.pop()
+                print(f'    {self.freeshapes=}')
 
+    def get_canvas(self, mode='freehand'):
+        # print('in get_canvas...')
+        canv = None
 
-    def reset_line(self, event) -> None:
-        """In freehand mode, handle mouseup: complete a line."""
-        print('in reset_line...')
+        ch = self.master.winfo_children()
+        ch_canv = [c for c in ch if c.__class__ == DrawCanvas]
+        for m, cnv in enumerate(ch_canv):
+            if cnv.mode == mode:
+                # print('    found canv')
+                canv = cnv
+            break
 
-        # self.last_line = self.linetags.copy()
-        # self.linetags = []
-        print(f'    1: {self.freetags=}')
-        self.freehand_started = False
-        # self.freehand_tagname = None
+        return canv
 
     def erase_drawing(self,
                       event,
@@ -396,34 +422,81 @@ class DrawCanvas(MyCanvas):
         Once we have only 1 window (and one canvas), it won't be necessary to
         get canvases from self.master.
         """
-        print('in erase_drawing:')
+        print('in erase_drawing...')
         ch = self.master.winfo_children()
         ch_canv = [c for c in ch if c.__class__ == DrawCanvas]
         if drawtype == 'freehand':
             # find the freehand canvas
-            for m, cnv in enumerate(ch_canv):
-                print(f'    {m}, {cnv.mode}, {cnv.freetags=}')
-                if cnv.mode == 'freehand':
-                    # if all line segments have unique tagnames
-                    # for n, item in enumerate(cnv.last_line):
-                    #     cnv.delete(item)
-                    # cnv.last_line = []
+            cnv = self.get_canvas('freehand')
 
-                    # if all line segments have the same tagname
-                    if len(cnv.freetags) > 0:
-                        print(f'    {cnv.freetags=}')
-                        print(f'    deleting free tag: {cnv.freetags[-1]}')
-                        cnv.delete(cnv.freetags[-1])
-                        cnv.freetags.pop()
+            # for m, cnv in enumerate(ch_canv):
+            #     print(f'    {m}, {cnv.mode}, {cnv.freetags=}')
+            #     if cnv.mode == 'freehand':
+            #         # if all line segments have unique tagnames
+            #         # for n, item in enumerate(cnv.last_line):
+            #         #     cnv.delete(item)
+            #         # cnv.last_line = []
+            #
+            #         # if all line segments have the same tagname
+            #         if len(cnv.freetags) > 0:
+            #             print(f'    {cnv.freetags=}')
+            #             print(f'    deleting free tag: {cnv.freetags[-1]}')
+            #             cnv.delete(cnv.freetags[-1])
+            #             cnv.freetags.pop()
+            print(f'    {cnv.mode}, {cnv.freetags=}')
+            if len(cnv.freetags) > 0:
+                print(f'    {cnv.freetags=}')
+                print(f'    deleting free tag: {cnv.freetags[-1]}')
+                cnv.delete(cnv.freetags[-1])
+                cnv.freetags.pop()
         else:
             # find the lines canvas
             for m, cnv in enumerate(ch_canv):
                 if cnv.mode == 'lines':
                     if len(cnv.linetags) > 0:
+                        del_shape = False
                         print(f'    {cnv.linetags=}')
                         print(f'    deleting line tag: {cnv.linetags[-1]}')
+                        if len(cnv.linetags[self.linestart:]) == 1: del_shape = True
                         cnv.delete(cnv.linetags[-1])
                         cnv.linetags.pop()
+                        if del_shape:
+                            self.lineshapes.pop()
+
+    def erase_shape(self,
+                    event,
+                    drawtype='freehand') -> None:
+        """Delete the last line or set of lines, depending on mode.
+
+        This will erase the specified type of drawing from a canvas
+        in either window (for the app version that has two windows).
+
+        Once we have only 1 window (and one canvas), it won't be necessary to
+        get canvases from self.master.
+        """
+        print('in erase_shape...')
+        if drawtype == 'freehand':
+            # find the freehand canvas
+            cnv = self.get_canvas('freehand')
+            print(f'    {cnv.freetags=}')
+            print(f'    {cnv.freeshapes=}')
+
+            if len(cnv.freeshapes) > 0:
+                # print(f'    deleting freeshape: {cnv.freeshapes[-1]}')
+
+                for n, sh in enumerate(cnv.freeshapes[-1]):
+                    # remove the line from the display
+                    print(f'        deleting {sh}')
+                    cnv.delete(sh)
+
+                    # remove the tag from the list of tags
+                    print(f'        removing {sh} from freetags')
+                    cnv.freetags.remove(sh)
+
+                # remove the shape from the list of shapes
+                cnv.freeshapes.pop()
+                print(f'    {cnv.freetags=}')
+                print(f'    {cnv.freeshapes=}')
 
     def erase_all(self,
                   event,
@@ -433,16 +506,25 @@ class DrawCanvas(MyCanvas):
         Once we have only 1 window (and one canvas), it won't be necessary to
         get canvases from self.master.
         """
+        print('in erase_all')
         ch = self.master.winfo_children()
         ch_canv = [c for c in ch if c.__class__ == DrawCanvas]
 
         for m, cnv in enumerate(ch_canv):
             if cnv.mode == drawtype:
-                drawings = cnv.find_all()
-                for item in drawings:
-                    cnv.delete(item)
+                if drawtype == 'freehand':
+                    # this will return ids...
+                    # drawings = cnv.find_all()
+                    drawings = cnv.freetags
+                else:
+                    drawings = cnv.linetags
+                # for item in drawings:
+                #     cnv.delete(item)
+                print(f'    for {drawtype}, {drawings=}')
 
-                # cnv.last_line = []
+                # re-initialize variables
+                # ...
+
 
     def canvas_help(self) -> None:
         """Display help to the user. Override this in child classes."""
