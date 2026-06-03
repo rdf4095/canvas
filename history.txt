@@ -1,0 +1,52 @@
+additional history for canvas_ui.py
+------------------
+03-14-2024  Add a section for utility functions.
+07-28-2024  Update function docstrings.
+08-03-2024  Added comments section to module header.
+08-16-2024  Edit get_posn to handle 2 or 3 images.
+08-19-2024  Add alignment options: vertical center, horizontal right.
+08-24-2024  Add function handle_extra to calculate position for images if
+            there are more than two of them. Add type hinting for functions
+            that don't have it.
+09-07-2024  Add get_1_posn(), to determine a single image position.
+09-12-2024  Add get_positions() to determine up to four image positions.
+            Remove handle_extra().
+09-13-2024  Add type hinting to get_1_posn and get_positions.
+
+
+additional history for canvas_classes.py
+------------------
+03-01-2025  Add function calc_location to calculate x,y position for the next
+            instance of each shape. Add default rectangle and arc sizes.
+            Standardize class docstring format.
+            New commit.
+03-04-2025  Review all docstrings and edit for clarity and consistency.
+03-24-2025  ShapeCanvas binds 'Key' event, to be first used for deleting the
+            current shape. Add delete_shape(). Add 'objlist' to keep track of
+            shapes, to replace shape_tags, shape_centers and shape_linecolors.
+03-29-2025  Finish replacing use cases for shape_centers and shape_linecolors.
+            Add bind for Control-Button-3, and stub multi_select().
+03-31-2025  Remove references to shape_centers and shape_linecolors, and old
+            comments and debug statements.
+04-02-2025  Enable execution of this script, for feature testing. Add option to
+            revert color of the selected shape to default (black).
+10-14-2025  Detect if user is deleting the only shape. Add ShapeCanvas
+            list attribute: multi_select.
+10-18-2025  Implement delete-last for 'lines' mode and 'freehand' mode, using
+            Ctrl-F or -L. Add handle_key() to DrawCanvas.
+10-21-2025  Add function return types.
+10-23-2025  In line mode, shape (set of lines) to be ended without connecting
+            to the first point.
+10-25-2025  Implement delete-all for either mode, using Ctrl-Shift-F or -L.
+10-30-2025  Add drag to the options for multi-selected shapes.d
+10-31-2025  Add resize to the options for multi-selected shapes.
+11-12-2025  For ShapeCanvas, Control+x now deletes all multi-selected shapes.
+11-14-2025  For ShapeCanvas, nudge now moves all selected shapes.
+11-24-2025  Rename nudge_shape to nudge_location. Add callbacks to delete,
+            duplicate, select single or reveal selected shape.
+11-30-2025  Trial implementation: bind to nudge_location with no arguments,
+            and let the fxn move the object based on keysym=Up/Down/Left/Right.
+            Add nudge_size function.
+12-03-2025  For ShapeCanvas, Refactor nudge_size() to be more efficient.
+            Combine "Key" event with modifiers, for handle_key().
+12-11-2025  Handle modifier keys with handle_key(). Refactor drag_shape().
