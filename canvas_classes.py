@@ -11,24 +11,6 @@ history:
 -------
 02-26-2025  creation
 ... see history.txt
-02-06-2025  For ShapeCanvas, add guard statements to shape manipulation functions.
-02-11-2026  In ShapeCanvas, reorder some methods; set_to_color now sets outline
-            for the closest shape, not the selected one.
-02-12-2026  Remove old code, update inline docs.
-02-16-2026  Remove Alt-S to select shape. Add set_focus to report_cursor_posn
-            so key-bound functions can read the event in the ShapeCanvas.
-02-17-2026  For ShapeCanvas, in toggle_multi_select, remove highlight for
-            selected shape. (May not happen in select_shape, due to timing.)
-02-19-2026  For ShapeCanvas, handle the arrow shape.
-02-20-2026  For ShapeCanvas, debug set_to_color() to require canvas focus.
-02-23-2026  For ShapeCanvas, replace get_and_report_center() wih report_shape().
-            report_size() now assumes the selected object. Remove redundant
-            print statements in handle_key().
-03-05-2026  Refactor handle_key().
-03-09-2026  Update most class docstrings, add docstrings for some methods,
-            remove some old code.
-03-16-2026  set_to_black() is now set_to_color(). Refactor DrawCanvas
-            handle_key method. Move docstring notes to a scratch file.
 04-01-2026  ShapeCanvas: object size now updates as it is created with drag.
             unselect_shape() and object delete now handle 'no objects' case.
 04-30-2026  DrawCanvas: use Control-Mouse-1 to draw in line mode, then debug
@@ -50,19 +32,20 @@ history:
             to use different key combinations for some functions.
 06-01-2026  ShapeCanvas: move duplicate and delete code into functions.
 06-03-2026  Begin testing the callout object.
+06-05-2026  DrawCanvas: Build helpfile text.
+06-10-2026  Display on-demand formatted help text.
 """
 import tkinter as tk
 
 
 class MyCanvas(tk.Canvas):
     """
-    MyCanvas : Defines a tk Canvas with some default attributes.
+    MyCanvas : Defines a Canvas with some default attributes.
 
     Extends: tk.Canvas
 
     Attributes:
-        firstx, firsty (int): First location L-clicked at the beginning of
-            an interactive session.
+        firstx, firsty (int): First canvas location L-clicked by the user.
         startx, starty (int): last location clicked.
         previousx, previousy (int): next-to-last location clicked, enables shapes
             to be automatically closed.
@@ -118,7 +101,7 @@ class MyCanvas(tk.Canvas):
             thispoint.yval = yval
         self.Point = type('Point', (), {"__init__": point_init})
 
-        hlp = tk.Button(self, text="?", command=self.canvas_help)
+        hlp = tk.Button(self, text="?", command=self.display_help)
         self.create_window(self.width, 0, anchor=tk.NE, window=hlp)
 
         # entered = tk.Text(None, foreground='blue', background='yellow')
@@ -180,9 +163,31 @@ class MyCanvas(tk.Canvas):
         self.startx, self.starty = event.x, event.y
         self.points.append(self.Point(event.x, event.y))
 
-    def canvas_help(self) -> None:
-        """Display help to the user. Override this in child classes."""
-        pass
+    # def display_help(self) -> None:
+    #     """Display help to the user. Override this in child classes."""
+    #     pass
+
+
+class HelpObj():
+    def __init__(self,
+                 state,
+                 mod
+                 ):
+        self.state = state
+        self.mod = mod
+        self.options = {}
+
+    def add_key(self, key, helptext):
+        d = {key: helptext}
+        self.options.update(d)
+
+    def remove_key(self, key):
+        self.options.pop(key)
+
+    def get_key(self, key):
+        helpstr = self.mod + ' + ' + key + ': ' + self.options[key]
+
+        return helpstr
 
 
 class DrawCanvas(MyCanvas):
@@ -190,7 +195,7 @@ class DrawCanvas(MyCanvas):
     DrawCanvas : a tk Canvas for interactive drawing.
 
     This class allows drawing in one of two user-specified modes, 'lines'
-    which draws line segments between locations indicated by mouse clicks,
+    which draws line segments between locations indicated by mouse L-clicks,
     and 'freehand' which draws line segments in response to mouse L-button
     plus motion.
 
@@ -237,6 +242,8 @@ class DrawCanvas(MyCanvas):
 
         super().__init__(parent, width=self.width, height=self.height, background=self.background, name=self.name)
 
+        # parent.update()
+        # print(f'DrawCanvas parent: {parent.geometry()}')
         self.linecolor = 'black'
 
         self.freehand_started = False
@@ -247,12 +254,43 @@ class DrawCanvas(MyCanvas):
         self.linetags = []
         self.lineshapes = []
 
+        # possible shortcuts
+        # self.shortcuts = {0: 'None', 1: 'Shift', 4: 'Control',
+        #                   5: 'Control-Shift', 8: 'Alt', 9: 'Shift-Alt',
+        #                   12: 'Control-Alt', 13: 'Control-Alt-Shift'}
+
+        # previous, works:
+        # self.shortcuts = {0: 'None', 1: 'Shift', 4: 'Control',
+        #                   5: 'Control-Shift', 8: 'Alt',
+        #                   12: 'Control-Alt', 13: 'Control-Alt-Shift'}
+
+        # test help object
+        self.help_c = HelpObj(4, 'Control')
+        self.help_cs = HelpObj(5, 'Control-Shift')
+        self.help_a = HelpObj(8, 'Alt')
+        self.help_cas = HelpObj(13, 'Control-Alt-Shift')
+
+        # self.shortcuts = {4: ['Control'],
+        #                   5: ['Control-Shift'],
+        #                   8: ['Alt'],
+        #                   13: ['Control-Alt-Shift'],
+        #                   }
+        #
+        # self.helpfile = self.build_help(self.shortcuts)
+        self.helpfile = [self.help_c,
+                         self.help_cs,
+                         self.help_a,
+                         self.help_cas]
+        self.build_help()
+
+        # this doesn't seem to do anything...
         f = self.focus_get()
-        print(f'init: {f=}')
+        # print(f'init: {f=}')    # == None
+
         match self.mode:
             case 'freehand':
-                # Ensure each line is separate. Without set_start, each
-                # line connects to the last mouse-up point.
+                # Ensure each line is separate.
+                # Without set_start, each line connects to the last mouse-up.
                 self.bind('<Button-1>', self.set_start)
 
                 self.bind('<Button1-Motion>', self.draw_freehand)
@@ -275,20 +313,25 @@ class DrawCanvas(MyCanvas):
         This version does not differentiate between L and R modifier keys.
         """
         print(f'in handle_key...')
-        modifiers = {0: 'None', 1: 'Shift', 4: 'Control',
-                     5: 'Control|Shift', 8: 'Alt',
-                     12: 'Control|Alt', 13: 'Control|Alt|Shift'}
-        # event.keycode may not be ascii !!
-        print(f'keys pressed: {modifiers[event.state]} + {event.keysym}')
+        # Note: event.keycode may not be ascii !!
+        shortcuts = {0: ['No Mod'],
+                     4: ['Control'],
+                     5: ['Control-Shift'],
+                     8: ['Alt'],
+                     13: ['Control-Alt-Shift'],
+                     }
+
+        print(f'keys pressed: {shortcuts[event.state]} + {event.keysym}')
+        # print(f'keys pressed: {event.state} + {event.keysym}')
 
         match event.state:
             case 4:
                 # Control
                 match event.keysym:
-                    case 'f' | 'F':
+                    case 'f':
                         print(f'    erase last line (freehand mode)')
                         self.undo_draw_freehand(event)
-                    case 'l' | 'L':
+                    case 'l':
                         print(f'    erase last line (line mode)')
                         self.undo_draw_line(event)
                     case _:
@@ -297,24 +340,13 @@ class DrawCanvas(MyCanvas):
             case 5:
                 # Control + Shift
                 match event.keysym:
-                    case 'f' | 'F':
+                    case 'F':
                         print(f'    delete last shape (freehand mode)')
                         self.delete_freehand_shape(event)
-                    case 'l' | 'L':
+                    case 'L':
+                        print(f'{event.keysym=}')
                         print(f'    delete last shape (line mode)')
                         self.delete_line_shape(event)
-            case 13:
-                # Control + Alt + Shift ??
-                match event.keysym:
-                    case 'f' | 'F':
-                        print(f'    delete all lines (freehand mode)')
-                        self.delete_all_freehand(event)
-                    case 'l' | 'L':
-                        print(f'    delete all lines (line mode)')
-                        self.delete_all_lines(event)
-                    case 'x' | 'X':
-                        print(f'    future: clear all lines')
-                        # self.clear_canvas(event)
             case 8:
                 # Alt
                 match event.keysym:
@@ -327,8 +359,20 @@ class DrawCanvas(MyCanvas):
                         print(f'...end freehand shape')
                         canv = self.get_canvas('freehand')
                         canv.freeshape_started = False
-            case 12:
-                pass
+            case 13:
+                # Control + Alt + Shift
+                match event.keysym:
+                    case 'F':
+                        print(f'    delete all lines (freehand mode)')
+                        self.delete_all_freehand(event)
+                    case 'L':
+                        print(f'    delete all lines (line mode)')
+                        self.delete_all_lines(event)
+                    case 'X':
+                        print(f'    future: clear all lines')
+                        # self.clear_canvas(event)
+            # case 12:
+            #     pass
             case _:
                 #     # No Modifier Key
                 self.handle_child_key(event)
@@ -509,10 +553,11 @@ class DrawCanvas(MyCanvas):
             cnv.delete(thistag)
             cnv.linetags.pop()
 
-            if thistag in cnv.lineshapes[-1]:
-                cnv.lineshapes[-1].remove(thistag)
-                if len(cnv.lineshapes[-1]) == 0:
-                    cnv.lineshapes.pop()
+            if len(cnv.lineshapes) > 0:
+                if thistag in cnv.lineshapes[-1]:
+                    cnv.lineshapes[-1].remove(thistag)
+                    if len(cnv.lineshapes[-1]) == 0:
+                        cnv.lineshapes.pop()
             print(f'    {cnv.lineshapes=}')
 
     def delete_freehand_shape(self,
@@ -623,9 +668,99 @@ class DrawCanvas(MyCanvas):
         print(f'        {drawings=}')
         print(f'        {shapes=}')
 
-    def canvas_help(self) -> None:
-        """Display help to the user. Override this in child classes."""
-        print('help for DrawCanvas')
+    def build_help(self) -> None:
+        # Control
+        self.help_c.add_key('f', 'erase last line (freehand mode)')
+        self.help_c.add_key('l', 'erase last line (line mode)')
+
+        # Control + Shift
+        self.help_cs.add_key('f', 'erase last line (freehand mode)')
+        self.help_cs.add_key('l', 'erase last line (line mode)')
+
+        # Alt
+        self.help_a.add_key('f', 'erase last line (freehand mode)')
+        self.help_a.add_key('l', 'erase last line (line mode)')
+
+        # Control + Alt + Shift
+        self.help_cas.add_key('f', 'erase last line (freehand mode)')
+        self.help_cas.add_key('l', 'erase last line (line mode)')
+
+    def set_window_offset(self, reference, edge):
+        """Calculate window position, as offset from the `reference` window.
+
+        Parameters:
+            reference (str) : geometry specification for the reference window.
+            edge (str) : vertical relative position, 'top' or 'bottom'.
+        """
+        top2_width = reference[0]
+        top2_height = reference[1].split('+')[0]
+        h_offset = reference[1].split('+')[1]
+        v_offset = reference[1].split('+')[2]
+
+        top2_h_offset = str(int(top2_width) + int(h_offset) + 40)
+        if edge == 'top':
+            top2_v_offset = str(int(v_offset) + 40)
+        else:
+            top2_v_offset = top2_height
+
+        return "+" + top2_h_offset + "+" + top2_v_offset
+
+    def display_help(self) -> None:
+        """Display help to the user."""
+        self.master.update()
+        master_win = self.master.geometry().split('x')
+
+        helpwin_offset = self.set_window_offset(master_win, 'top')
+
+        helpwin = tk.Toplevel()
+        # heuristic:
+        basesize = '500x250'
+        # geom = basesize + helpwin_offset
+        helpwin.geometry(basesize + helpwin_offset)
+        helpwin.title('Help for this class')
+
+        text_fr = tk.Frame(helpwin, relief='groove')
+        text_main = tk.Text(text_fr)
+        text_fr.pack()
+
+        helpstrings = []
+        # new_modifier = []
+        for listitem in self.helpfile:
+            for key in list(listitem.options.keys()):
+                helpstrings.append(listitem.get_key(key))
+
+        # Post-process the list of strings to insert blank lines
+        # when the modifier key changes.
+        proc_helpstrings = []
+        for n, i in enumerate(helpstrings):
+            proc_helpstrings.append(i)
+            if n < len(helpstrings) - 1:
+                thisone = i.split(' ')[0]
+                nextone = helpstrings[n + 1].split(' ')[0]
+                if thisone != nextone:
+                    proc_helpstrings.append('')
+
+        # for n, item in enumerate(helpstrings):
+        for n, item in enumerate(proc_helpstrings):
+            text_main.insert('end', item)
+            text_main.insert('end', '\n')
+
+            # insert blank line if the item (modifier key) changes
+            # if n < len(helpstrings) - 1:
+            #     this_mod = item.split(' ')[0]
+            #     next_mod = helpstrings[n+1].split(' ')[0]
+            #     if this_mod != next_mod:
+            #         text_main.insert('end', '\n')
+
+            len_shortcut = len(item.split(':')[0])
+            linenum = n + 1
+            start_spec = str(float(linenum))
+            end_spec = str(linenum) + '.' + str(len_shortcut)
+            text_main.tag_add('shortcut', start_spec, end_spec)
+            text_main.tag_config('shortcut', foreground='blue')
+
+        text_main.pack()
+
 
 class Shape():
     def __init__(self,
@@ -704,6 +839,12 @@ class ShapeCanvas(MyCanvas):
 
         self.arc_width = 20
         self.arc_height = 20
+
+        self.shortcuts = {0: 'None', 1: 'Shift', 4: 'Control',
+                          5: 'Control-Shift', 8: 'Alt',
+                          12: 'Control-Alt', 13: 'Control-Alt-Shift'}
+
+        self.helpfile = self.build_help(self.shortcuts)
 
         self.bind('<Button-1>', self.setup_shape)
         self.bind('<Shift-Motion>', self.drag_shape)
@@ -1330,7 +1471,7 @@ class ShapeCanvas(MyCanvas):
         self.selected = self.objlist[-1].id
 
     def duplicate_shape(self) -> None:
-        print('duplicate selected shape')
+        print('in duplicate_shape...')
         the_id = self.selected
         prev_shape = self.itemcget(the_id, 'tags').split(' ')[0]
         prev_obj = next((obj for obj in self.objlist if obj.id == the_id), None)
@@ -1361,7 +1502,7 @@ class ShapeCanvas(MyCanvas):
         self.objlist.append(newshape)
 
     def delete_shape(self) -> None:
-        print('delete selected shape')
+        print('in delete_shape...')
         if len(self.objlist) == 0:
             return
 
@@ -1455,9 +1596,35 @@ class ShapeCanvas(MyCanvas):
         """Set `self` dictionary item `p` to value `val`."""
         self.__dict__[p] = val
 
-    def canvas_help(self) -> None:
-        """Display help to the user. Override this in child classes."""
-        print('help for ShapeCanvas')
+    def build_help(self, shortcuts) -> list:
+        helpfile = []
+
+        for k, val in shortcuts.items():
+            match k:
+                case 1:
+                    # Shift
+                    helpfile.append(f'{val} + Arrow Key: nudge location')
+                    helpfile.append('')
+                case 4:
+                    # Control
+                    helpfile.append(f'{val} + d: duplicate shape')
+                    helpfile.append(f'{val} + r: release multi-selection')
+                    helpfile.append(f'{val} + x: delete shape')
+                    helpfile.append('')
+                case 8:
+                    # Alt
+                    helpfile.append(f'{val} + r: reveal selected shape')
+                    helpfile.append(f'{val} + b: set linecolor to black')
+                    helpfile.append(f'{val} + c: set linecolor to current color')
+                    helpfile.append('')
+
+        return helpfile
+
+    def display_help(self) -> None:
+        """Display help to the user."""
+        for n in self.helpfile:
+            print(f'{n}')
+
 
 if __name__ == '__main__':
     root = tk.Tk()
